@@ -76,7 +76,11 @@ function LoginForm() {
   });
   
   const onSubmit = (data: LoginData) => {
-    loginMutation.mutate(data);
+    if (loginMutation && typeof loginMutation.mutate === 'function') {
+      loginMutation.mutate(data);
+    } else {
+      console.error('Login mutation is not properly initialized');
+    }
   };
   
   return (
@@ -141,7 +145,11 @@ function RegisterForm() {
   });
   
   const onSubmit = (data: RegisterData) => {
-    registerMutation.mutate(data);
+    if (registerMutation && typeof registerMutation.mutate === 'function') {
+      registerMutation.mutate(data);
+    } else {
+      console.error('Register mutation is not properly initialized');
+    }
   };
   
   return (

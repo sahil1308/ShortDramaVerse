@@ -35,10 +35,13 @@ Options include:
 4. **Development Server**: Runs a custom dev server with API proxy and UI
 5. **API Proxy**: Runs an API testing interface
 
-### Other Scripts
+### Development Server Scripts
 
 - `start-servers.sh`: Starts all server components together with proper cleanup
-- `start-dev.sh`: Legacy script for starting the main server and proxy
+- `start-dev.js`: Starts all development servers simultaneously
+- `start-client.sh`: Runs only the client application on port 8888
+- `start-dev-server.sh`: Runs the development testing server on port 8080
+- `server-only.js`: Runs only the API server on port 3000
 - `run-proxy-dev.sh`: Legacy script for starting just the proxy server
 - `test-api.js`: Script to test API endpoints from the command line
 

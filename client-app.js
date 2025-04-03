@@ -16,7 +16,7 @@ const port = 8888;
 app.use(cors());
 
 // Create proxy middleware for API requests
-const apiProxy = createProxyMiddleware('/api', {
+const apiProxy = createProxyMiddleware({
   target: 'http://localhost:3000',
   changeOrigin: true,
   pathRewrite: {

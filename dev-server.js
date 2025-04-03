@@ -850,14 +850,14 @@ app.get('/auth', (req, res) => {
             if (user) {
               // Add logged in status
               const formContainer = document.querySelector('.form-container');
-              formContainer.innerHTML = `
-                <h2>Already Authenticated</h2>
-                <p>You are currently logged in as <strong>${user.username}</strong>.</p>
-                <p>User ID: ${user.id}</p>
-                <p>Email: ${user.email}</p>
-                <p>Display Name: ${user.displayName || user.username}</p>
-                <button class="button" onclick="logout()">Logout</button>
-              `;
+              // Build the HTML content without template literals to avoid LSP issues
+              const content = '<h2>Already Authenticated</h2>' +
+                '<p>You are currently logged in as <strong>' + user.username + '</strong>.</p>' +
+                '<p>User ID: ' + user.id + '</p>' +
+                '<p>Email: ' + user.email + '</p>' +
+                '<p>Display Name: ' + (user.displayName || user.username) + '</p>' +
+                '<button class="button" onclick="logout()">Logout</button>';
+              formContainer.innerHTML = content;
             }
           });
           

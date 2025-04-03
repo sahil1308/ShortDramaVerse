@@ -38,6 +38,17 @@ ShortDramaVerse is built with:
 
 ### Development
 
+Multiple development server options are available to overcome Vite host restrictions in environments like Replit:
+
+- **Main Application**: `npm run dev` or `./start.sh` 
+- **Client App**: `./start-client.sh` - Simplified UI with full API functionality (port 8888)
+- **Development Server**: `./start-dev-server.sh` - Testing tools and API interface (port 8080)
+- **API Proxy**: `node proxy.js` - API testing interface (port 3333)
+- **Server-Only Mode**: `node server-only.js` - Just the API (port 3000)
+- **All Servers**: `node start-dev.js` - Starts all servers simultaneously
+
+For detailed usage instructions, see [USAGE.md](USAGE.md).
+
 For comprehensive development instructions, refer to [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Project Structure
