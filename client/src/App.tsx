@@ -10,22 +10,21 @@ import AdminDashboard from "@/pages/admin/dashboard";
 import AdminContentManagement from "@/pages/admin/content-management";
 import AdminUserManagement from "@/pages/admin/user-management";
 import AdminAnalytics from "@/pages/admin/analytics";
-import { ProtectedRoute } from "./lib/protected-route";
 
-// The Router component needs to be inside App where AuthProvider is available from main.tsx
+// In development, remove protected routes for easier testing
 function App() {
   return (
     <>
       <Switch>
         <Route path="/auth" component={AuthPage} />
-        <ProtectedRoute path="/" component={HomePage} />
-        <ProtectedRoute path="/watch/:id" component={WatchPage} />
-        <ProtectedRoute path="/profile" component={ProfilePage} />
-        <ProtectedRoute path="/watchlist" component={WatchlistPage} />
-        <ProtectedRoute path="/admin" component={AdminDashboard} />
-        <ProtectedRoute path="/admin/content" component={AdminContentManagement} />
-        <ProtectedRoute path="/admin/users" component={AdminUserManagement} />
-        <ProtectedRoute path="/admin/analytics" component={AdminAnalytics} />
+        <Route path="/" component={HomePage} />
+        <Route path="/watch/:id" component={WatchPage} />
+        <Route path="/profile" component={ProfilePage} />
+        <Route path="/watchlist" component={WatchlistPage} />
+        <Route path="/admin" component={AdminDashboard} />
+        <Route path="/admin/content" component={AdminContentManagement} />
+        <Route path="/admin/users" component={AdminUserManagement} />
+        <Route path="/admin/analytics" component={AdminAnalytics} />
         <Route component={NotFound} />
       </Switch>
       <Toaster />

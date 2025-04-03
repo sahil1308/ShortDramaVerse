@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useAuth, loginSchema, registerFormConfig } from "@/hooks/use-auth";
+import { loginSchema as loginSchemaConfig, registerFormConfig } from "@/hooks/use-auth";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,13 +18,34 @@ import {
 import { Logo } from "@/icons/logo";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+
+// Create schemas directly here to avoid useAuth hook dependency
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const registerSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  displayName: z.string().min(2, "Display name is required"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string(),
+  profileImage: z.string().nullable().optional(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
 
 export default function AuthPage() {
-  const { user, loginMutation, registerMutation } = useAuth();
   const [_, navigate] = useLocation();
   const [authType, setAuthType] = useState<"login" | "register">("login");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Reset form errors when switching tabs
   useEffect(() => {
@@ -32,49 +53,73 @@ export default function AuthPage() {
     setRegisterError(null);
   }, [authType]);
 
-  // Clear any errors when mutations complete
-  useEffect(() => {
-    if (!loginMutation.isPending && loginMutation.isError && loginMutation.error) {
-      setLoginError(loginMutation.error.message || "Login failed. Please try again.");
-    }
-    
-    if (!registerMutation.isPending && registerMutation.isError && registerMutation.error) {
-      setRegisterError(registerMutation.error.message || "Registration failed. Please try again.");
-    }
-  }, [loginMutation.isPending, registerMutation.isPending, loginMutation.isError, registerMutation.isError]);
-
-  // Redirect to home if already logged in
-  useEffect(() => {
-    if (user) {
+  // Login mutation
+  const loginMutation = useMutation({
+    mutationFn: async (credentials: z.infer<typeof loginSchema>) => {
+      const res = await apiRequest("POST", "/api/login", credentials);
+      return await res.json();
+    },
+    onSuccess: (user) => {
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${user.displayName}!`,
+      });
       navigate("/");
-    }
-  }, [user, navigate]);
+    },
+    onError: (error: Error) => {
+      setLoginError(error.message || "Login failed. Please try again.");
+    },
+  });
 
-  // Don't render anything during redirect
-  if (user) {
-    return null;
-  }
+  // Register mutation
+  const registerMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof registerSchema>) => {
+      const { confirmPassword, ...userData } = data;
+      const res = await apiRequest("POST", "/api/register", userData);
+      return await res.json();
+    },
+    onSuccess: (user) => {
+      toast({
+        title: "Registration successful",
+        description: `Welcome to ShortDramaVerse, ${user.displayName}!`,
+      });
+      navigate("/");
+    },
+    onError: (error: Error) => {
+      setRegisterError(error.message || "Registration failed. Please try again.");
+    },
+  });
 
   // Login form
-  const loginForm = useForm<z.infer<typeof loginSchema.schema>>({
-    resolver: zodResolver(loginSchema.schema),
-    defaultValues: loginSchema.defaultValues,
+  const loginForm = useForm<z.infer<typeof loginSchema>>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+    },
     mode: "onChange",
   });
 
-  const onLoginSubmit = (data: z.infer<typeof loginSchema.schema>) => {
+  const onLoginSubmit = (data: z.infer<typeof loginSchema>) => {
     setLoginError(null);
     loginMutation.mutate(data);
   };
 
   // Register form
-  const registerForm = useForm<z.infer<typeof registerFormConfig.schema>>({
-    resolver: zodResolver(registerFormConfig.schema),
-    defaultValues: registerFormConfig.defaultValues,
+  const registerForm = useForm<z.infer<typeof registerSchema>>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+      confirmPassword: "",
+      displayName: "",
+      email: "",
+      profileImage: "https://ui-avatars.com/api/?background=E50914&color=fff",
+    },
     mode: "onChange",
   });
 
-  const onRegisterSubmit = (data: z.infer<typeof registerFormConfig.schema>) => {
+  const onRegisterSubmit = (data: z.infer<typeof registerSchema>) => {
     setRegisterError(null);
     registerMutation.mutate(data);
   };

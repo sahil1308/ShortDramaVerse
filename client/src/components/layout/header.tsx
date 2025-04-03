@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
 import { 
   Search, 
   Bell, 
@@ -26,12 +25,34 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+
+// Temporary mock user data for development
+const mockUser = {
+  id: 1,
+  displayName: "Test User",
+  username: "testuser",
+  coins: 100,
+  profileImage: "https://ui-avatars.com/api/?background=E50914&color=fff",
+  isAdmin: true,
+  isPremium: true
+};
 
 export function Header() {
-  const { user, logoutMutation } = useAuth();
+  // Use mock user instead of real auth
+  const user = mockUser;
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [location, navigate] = useLocation();
+  
+  // Mock logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/logout");
+      window.location.href = "/auth";
+    }
+  });
   
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

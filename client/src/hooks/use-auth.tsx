@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useState, useEffect } from "react";
+import { createContext, ReactNode, useContext } from "react";
 import {
   useQuery,
   useMutation,
@@ -32,24 +32,13 @@ const registerSchema = insertUserSchema.extend({
 
 type RegisterData = z.infer<typeof registerSchema>;
 
-// Create a default context value to avoid null checks
-const defaultContextValue: AuthContextType = {
-  user: null,
-  isLoading: true,
-  error: null,
-  loginMutation: {} as UseMutationResult<SelectUser, Error, LoginData>,
-  logoutMutation: {} as UseMutationResult<void, Error, void>,
-  registerMutation: {} as UseMutationResult<SelectUser, Error, RegisterData>,
-};
-
-// Create the auth context with a default value
-export const AuthContext = createContext<AuthContextType>(defaultContextValue);
+// Create the auth context
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 // Create the auth provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [contextReady, setContextReady] = useState(false);
 
   // Query for the current user
   const {
@@ -128,13 +117,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // Set context as ready after initial load
-  useEffect(() => {
-    if (!isLoading) {
-      setContextReady(true);
-    }
-  }, [isLoading]);
-
   // Create the context value
   const value: AuthContextType = {
     user: user ?? null,
@@ -144,15 +126,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logoutMutation,
     registerMutation,
   };
-
-  // Show a loading state while context is initializing
-  if (!contextReady) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
-      </div>
-    );
-  }
 
   // Provide the auth context to child components
   return (
@@ -164,7 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 // Custom hook to access the auth context
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 }
 
 // Export the form configurations

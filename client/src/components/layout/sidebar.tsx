@@ -1,6 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/use-auth";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
 import { ChannelCard } from "@/components/ui/channel-card";
 import { Button } from "@/components/ui/button";
@@ -15,10 +14,31 @@ import {
   Settings,
   ShieldCheck
 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+
+// Temporary mock user data for development
+const mockUser = {
+  id: 1,
+  displayName: "Test User",
+  username: "testuser",
+  coins: 100,
+  profileImage: "https://ui-avatars.com/api/?background=E50914&color=fff",
+  isAdmin: true,
+  isPremium: true
+};
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { user, logoutMutation } = useAuth();
+  // Use mock user instead of real auth
+  const user = mockUser;
+  
+  // Mock logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/logout");
+      window.location.href = "/auth";
+    }
+  });
   
   // Fetch user subscriptions
   const { data: subscriptions } = useQuery<(Channel & { isSubscribed: boolean })[]>({

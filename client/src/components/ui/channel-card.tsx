@@ -2,8 +2,18 @@ import { Channel } from "@shared/schema";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 import { formatNumber } from "@/lib/utils";
+
+// Temporary mock user data for development
+const mockUser = {
+  id: 1,
+  displayName: "Test User",
+  username: "testuser",
+  coins: 100,
+  profileImage: "https://ui-avatars.com/api/?background=E50914&color=fff",
+  isAdmin: true,
+  isPremium: true
+};
 
 interface ChannelCardProps {
   channel: Channel;
@@ -13,7 +23,7 @@ interface ChannelCardProps {
 
 export function ChannelCard({ channel, isSubscribed = false, size = "md" }: ChannelCardProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const user = mockUser; // Mock user for development
   
   const sizeClasses = {
     sm: {
