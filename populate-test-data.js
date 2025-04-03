@@ -1,7 +1,7 @@
 // ShortDramaVerse Test Data Population Script
 // This script populates the application with sample data for testing
 
-import { storage } from './server/storage.js';
+import { storage } from './server/storage.ts';
 
 async function populateTestData() {
   console.log('Populating test data...');
