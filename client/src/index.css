@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 92% 49%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 100% 52%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 88%;
+
+    --accent: 45 100% 52%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 92% 49%;
+
+    --radius: 0.5rem;
+    
+    /* Chart colors */
+    --chart-1: 0 92% 49%;
+    --chart-2: 210 100% 52%;
+    --chart-3: 45 100% 52%;
+    --chart-4: 142 70% 49%;
+    --chart-5: 262 59% 59%;
+    
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 12%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 92% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 45 100% 52%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 0 92% 49%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+  
+  /* Video player custom styles */
+  .video-progress {
+    @apply h-1 bg-white/20 relative rounded-full overflow-hidden;
+  }
+  
+  .video-progress-inner {
+    @apply absolute top-0 left-0 h-full bg-primary;
+  }
+  
+  /* Custom hover effects for video cards */
+  .video-card {
+    @apply transition-transform duration-200;
+  }
+  
+  .video-card:hover {
+    @apply scale-[1.03];
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}
