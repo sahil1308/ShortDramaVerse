@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth, loginSchema, registerFormConfig } from "@/hooks/use-auth";
 import { z } from "zod";
@@ -16,16 +16,42 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Logo } from "@/icons/logo";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [_, navigate] = useLocation();
   const [authType, setAuthType] = useState<"login" | "register">("login");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  // Reset form errors when switching tabs
+  useEffect(() => {
+    setLoginError(null);
+    setRegisterError(null);
+  }, [authType]);
+
+  // Clear any errors when mutations complete
+  useEffect(() => {
+    if (!loginMutation.isPending && loginMutation.isError && loginMutation.error) {
+      setLoginError(loginMutation.error.message || "Login failed. Please try again.");
+    }
+    
+    if (!registerMutation.isPending && registerMutation.isError && registerMutation.error) {
+      setRegisterError(registerMutation.error.message || "Registration failed. Please try again.");
+    }
+  }, [loginMutation.isPending, registerMutation.isPending, loginMutation.isError, registerMutation.isError]);
 
   // Redirect to home if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
+
+  // Don't render anything during redirect
   if (user) {
-    navigate("/");
     return null;
   }
 
@@ -33,9 +59,11 @@ export default function AuthPage() {
   const loginForm = useForm<z.infer<typeof loginSchema.schema>>({
     resolver: zodResolver(loginSchema.schema),
     defaultValues: loginSchema.defaultValues,
+    mode: "onChange",
   });
 
   const onLoginSubmit = (data: z.infer<typeof loginSchema.schema>) => {
+    setLoginError(null);
     loginMutation.mutate(data);
   };
 
@@ -43,10 +71,17 @@ export default function AuthPage() {
   const registerForm = useForm<z.infer<typeof registerFormConfig.schema>>({
     resolver: zodResolver(registerFormConfig.schema),
     defaultValues: registerFormConfig.defaultValues,
+    mode: "onChange",
   });
 
   const onRegisterSubmit = (data: z.infer<typeof registerFormConfig.schema>) => {
+    setRegisterError(null);
     registerMutation.mutate(data);
+  };
+
+  // For demo purposes, add a test user login
+  const loginAsTestUser = () => {
+    loginMutation.mutate({ username: "testuser", password: "password123" });
   };
 
   return (
@@ -76,6 +111,13 @@ export default function AuthPage() {
                   onSubmit={loginForm.handleSubmit(onLoginSubmit)}
                   className="space-y-4"
                 >
+                  {loginError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{loginError}</AlertDescription>
+                    </Alert>
+                  )}
+                  
                   <FormField
                     control={loginForm.control}
                     name="username"
@@ -122,6 +164,17 @@ export default function AuthPage() {
                       "Login"
                     )}
                   </Button>
+                  
+                  <div className="text-center text-sm text-muted-foreground mt-4">
+                    <Button 
+                      variant="link" 
+                      onClick={loginAsTestUser}
+                      type="button"
+                      className="px-0"
+                    >
+                      Login as test user
+                    </Button>
+                  </div>
                 </form>
               </Form>
             </TabsContent>
@@ -132,6 +185,13 @@ export default function AuthPage() {
                   onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
                   className="space-y-4"
                 >
+                  {registerError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{registerError}</AlertDescription>
+                    </Alert>
+                  )}
+                  
                   <FormField
                     control={registerForm.control}
                     name="username"

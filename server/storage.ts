@@ -56,7 +56,7 @@ export interface IStorage {
   getUserCoinTransactions(userId: number): Promise<CoinTransaction[]>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Using 'any' to bypass SessionStore type issues
 }
 
 export class MemStorage implements IStorage {
@@ -69,7 +69,7 @@ export class MemStorage implements IStorage {
   private subscriptions: Map<number, Subscription>;
   private coinTransactions: Map<number, CoinTransaction>;
   
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Using 'any' to bypass SessionStore type issues
   
   private userCurrentId: number;
   private dramaSeriesCurrentId: number;
@@ -113,6 +113,18 @@ export class MemStorage implements IStorage {
     }).then(user => {
       // Update the user to be an admin
       this.users.set(user.id, { ...user, isAdmin: true, coins: 1000, isPremium: true });
+    });
+
+    // Create a regular test user for easy login
+    this.createUser({
+      username: "testuser",
+      password: "password123", // This will be hashed in auth.ts
+      displayName: "Test User",
+      email: "test@shortdramaverse.com",
+      profileImage: "https://ui-avatars.com/api/?name=Test+User&background=3498db&color=fff",
+    }).then(user => {
+      // Provide some coins to test premium features
+      this.users.set(user.id, { ...user, coins: 500 });
     });
 
     // Initialize example channels
