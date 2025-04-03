@@ -1,31 +1,34 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { StyleSheet, Platform } from 'react-native';
-import { MainTabParamList } from '@/types/drama';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
+import { MainTabsParamList } from '@/types/drama';
+import { useAuth } from '@/hooks/useAuth';
 
-// Import screens
+// Import screens for tabs
 import HomeScreen from '@/screens/home/HomeScreen';
 import SearchScreen from '@/screens/search/SearchScreen';
 import WatchlistScreen from '@/screens/watchlist/WatchlistScreen';
 import ProfileScreen from '@/screens/profile/ProfileScreen';
 
-// Create bottom tabs navigator
-const Tab = createBottomTabNavigator<MainTabParamList>();
+// Create tab navigator
+const Tab = createBottomTabNavigator<MainTabsParamList>();
 
 /**
- * Main tabs navigator component
- * Provides navigation between main app screens
+ * Main tabs navigation component
+ * Handles the bottom tab bar and its screens
  */
 const MainTabs: React.FC = () => {
+  const { user } = useAuth();
+  
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#E50914',
-        tabBarInactiveTintColor: '#8E8E8E',
+        tabBarActiveTintColor: '#0366d6',
+        tabBarInactiveTintColor: '#666',
         tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabBarLabel,
+        headerStyle: styles.header,
+        headerTitleStyle: styles.headerTitle,
       }}
     >
       <Tab.Screen
@@ -33,7 +36,7 @@ const MainTabs: React.FC = () => {
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+            <Feather name="home" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
             <TabLabel label="Home" color={color} />
@@ -45,7 +48,7 @@ const MainTabs: React.FC = () => {
         component={SearchScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
+            <Feather name="search" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
             <TabLabel label="Search" color={color} />
@@ -57,7 +60,7 @@ const MainTabs: React.FC = () => {
         component={WatchlistScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="playlist-play" size={size} color={color} />
+            <Feather name="bookmark" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
             <TabLabel label="Watchlist" color={color} />
@@ -69,35 +72,61 @@ const MainTabs: React.FC = () => {
         component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+            <Feather name="user" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
             <TabLabel label="Profile" color={color} />
           ),
+          headerTitle: `${user?.displayName || user?.username || 'Profile'}`,
         }}
       />
     </Tab.Navigator>
   );
 };
 
-/**
- * Custom tab label component
- */
-const TabLabel: React.FC<{ label: string; color: string }> = ({ label, color }) => (
-  <React.Fragment>{label}</React.Fragment>
+// Custom tab label component for consistent styling
+const TabLabel = ({ label, color }) => (
+  <Text style={[styles.tabLabel, { color }]}>{label}</Text>
+);
+
+// Utility component for screen content
+export const ScreenContainer = ({ children, style }) => (
+  <View style={[styles.screenContainer, style]}>{children}</View>
 );
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#0A0A0A',
-    borderTopWidth: 0,
-    elevation: 0,
-    height: Platform.OS === 'ios' ? 85 : 65,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+    height: 60,
+    paddingBottom: 8,
+    paddingTop: 8,
+    backgroundColor: '#fff',
+    borderTopColor: '#eaeaea',
+    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
   },
-  tabBarLabel: {
+  header: {
+    backgroundColor: '#fff',
+    elevation: 0,
+    shadowOpacity: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eaeaea',
+  },
+  headerTitle: {
+    color: '#333',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  tabLabel: {
     fontSize: 12,
+    marginTop: 2,
     fontWeight: '500',
+  },
+  screenContainer: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
   },
 });
 

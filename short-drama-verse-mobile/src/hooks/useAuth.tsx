@@ -1,207 +1,165 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, AuthCredentials, RegisterCredentials, ProfileUpdateFormData } from '@/types/drama';
-import { useNavigation } from '@react-navigation/native';
+import { AuthResponse, User } from '@/types/drama';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '@/types/drama';
-import { queryClient } from '@/lib/queryClient';
-import { apiRequest } from '@/lib/queryClient';
-import { endpoints } from '@/services/api';
+import api from '@/services/api';
+import { useSafeMutation, useSafeQuery, queryClient } from '@/lib/queryClient';
 
-// Keys for local storage
-const USER_STORAGE_KEY = 'auth_user';
-const TOKEN_STORAGE_KEY = 'auth_token';
-
-// AuthContext type
-interface AuthContextType {
+// Context type definition
+type AuthContextType = {
   user: User | null;
   isLoading: boolean;
-  isInitialized: boolean;
-  error: Error | null;
-  login: (credentials: AuthCredentials) => Promise<User>;
-  register: (userData: RegisterCredentials) => Promise<User>;
+  loginLoading: boolean;
+  registerLoading: boolean;
+  profileUpdateLoading: boolean;
+  error: string | null;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (data: ProfileUpdateFormData) => Promise<User>;
+  updateProfile: (profileData: Partial<User>) => Promise<void>;
+  isAuthenticated: boolean;
   clearError: () => void;
-}
+};
 
-// Create context with default values
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Create the auth context
+const AuthContext = createContext<AuthContextType | null>(null);
 
-// Provider component for AuthContext
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// Provider component
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isInitialized, setIsInitialized] = useState<boolean>(false);
-  const [error, setError] = useState<Error | null>(null);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigation = useNavigation();
 
-  // Initialize auth state from storage
+  // Clear error state
+  const clearError = () => setError(null);
+
+  // Login mutation
+  const { mutateAsync: loginMutate, isPending: loginLoading } = useSafeMutation<AuthResponse>({
+    mutationFn: async (credentials: { username: string; password: string }) => {
+      return await api.request('POST', api.endpoints.auth.login, credentials);
+    },
+    onSuccess: async (data) => {
+      await api.setAuthToken(data.token);
+      setUser(data.user);
+      setIsAuthenticated(true);
+      queryClient.invalidateQueries({ queryKey: [api.endpoints.auth.user] });
+    },
+    onError: (error: any) => {
+      setError(error.message || 'Failed to login');
+      setIsAuthenticated(false);
+    },
+  });
+
+  // Register mutation
+  const { mutateAsync: registerMutate, isPending: registerLoading } = useSafeMutation<AuthResponse>({
+    mutationFn: async (userData: { username: string; email: string; password: string }) => {
+      return await api.request('POST', api.endpoints.auth.register, userData);
+    },
+    onSuccess: async (data) => {
+      await api.setAuthToken(data.token);
+      setUser(data.user);
+      setIsAuthenticated(true);
+      queryClient.invalidateQueries({ queryKey: [api.endpoints.auth.user] });
+    },
+    onError: (error: any) => {
+      setError(error.message || 'Failed to register');
+      setIsAuthenticated(false);
+    },
+  });
+
+  // Logout mutation
+  const { mutateAsync: logoutMutate } = useSafeMutation({
+    mutationFn: async () => {
+      return await api.request('POST', api.endpoints.auth.logout);
+    },
+    onSuccess: async () => {
+      await api.clearAuthToken();
+      setUser(null);
+      setIsAuthenticated(false);
+      queryClient.clear();
+      // Reset navigation to login screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' as never }],
+      });
+    },
+    onError: (error: any) => {
+      setError(error.message || 'Failed to logout');
+      // Even if the server call fails, we clear local auth
+      api.clearAuthToken();
+      setUser(null);
+      setIsAuthenticated(false);
+    },
+  });
+
+  // Profile update mutation
+  const { mutateAsync: updateProfileMutate, isPending: profileUpdateLoading } = useSafeMutation<User>({
+    mutationFn: async (profileData: Partial<User>) => {
+      return await api.request('PATCH', api.endpoints.profile.update, profileData);
+    },
+    onSuccess: (updatedUser) => {
+      setUser(updatedUser);
+      queryClient.invalidateQueries({ queryKey: [api.endpoints.auth.user] });
+      Alert.alert('Success', 'Profile updated successfully');
+    },
+    onError: (error: any) => {
+      setError(error.message || 'Failed to update profile');
+    },
+  });
+
+  // Check authentication status on app startup
   useEffect(() => {
-    const initializeAuth = async () => {
+    const checkAuthentication = async () => {
+      setIsLoading(true);
       try {
-        const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
+        const isAuthenticated = await api.isAuthenticated();
+        if (isAuthenticated) {
+          // Fetch user details
+          const userData = await api.request<User>('GET', api.endpoints.auth.user);
+          setUser(userData);
+          setIsAuthenticated(true);
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
         }
-      } catch (err) {
-        console.error('Error restoring auth state:', err);
+      } catch (error: any) {
+        console.error('Authentication check failed:', error);
+        setUser(null);
+        setIsAuthenticated(false);
       } finally {
-        setIsInitialized(true);
+        setIsLoading(false);
       }
     };
 
-    initializeAuth();
+    checkAuthentication();
   }, []);
 
-  // Login method
-  const login = async (credentials: AuthCredentials): Promise<User> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await apiRequest<User>(
-        'POST',
-        endpoints.auth.login,
-        credentials
-      );
-
-      // Store user data
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
-      setUser(response);
-      
-      // Invalidate queries that might depend on auth state
-      queryClient.invalidateQueries({ queryKey: [endpoints.user.current] });
-      
-      return response;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      
-      if (Platform.OS !== 'web') {
-        Alert.alert('Login Failed', error.message);
-      }
-      
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
+  // Expose the login function
+  const login = async (username: string, password: string) => {
+    clearError();
+    await loginMutate({ username, password });
   };
 
-  // Register method
-  const register = async (userData: RegisterCredentials): Promise<User> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await apiRequest<User>(
-        'POST',
-        endpoints.auth.register,
-        userData
-      );
-
-      // Store user data
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
-      setUser(response);
-      
-      // Invalidate queries that might depend on auth state
-      queryClient.invalidateQueries({ queryKey: [endpoints.user.current] });
-      
-      return response;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      
-      if (Platform.OS !== 'web') {
-        Alert.alert('Registration Failed', error.message);
-      }
-      
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
+  // Expose the register function
+  const register = async (username: string, email: string, password: string) => {
+    clearError();
+    await registerMutate({ username, email, password });
   };
 
-  // Logout method
-  const logout = async (): Promise<void> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await apiRequest('POST', endpoints.auth.logout);
-      
-      // Clear stored user data
-      await AsyncStorage.removeItem(USER_STORAGE_KEY);
-      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
-      
-      // Reset user state
-      setUser(null);
-      
-      // Clear all queries in the cache
-      queryClient.clear();
-      
-      // Navigate to auth screen
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'AuthStack' }],
-      });
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      console.error('Logout error:', error);
-      
-      // Even if the API call fails, we still want to clear local state
-      await AsyncStorage.removeItem(USER_STORAGE_KEY);
-      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
-      setUser(null);
-      
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'AuthStack' }],
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  // Expose the logout function
+  const logout = async () => {
+    clearError();
+    await logoutMutate();
   };
 
-  // Update user profile
-  const updateProfile = async (data: ProfileUpdateFormData): Promise<User> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await apiRequest<User>(
-        'PATCH',
-        endpoints.user.updateProfile,
-        data
-      );
-
-      // Update stored user data
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
-      setUser(response);
-      
-      // Invalidate user data queries
-      queryClient.invalidateQueries({ queryKey: [endpoints.user.current] });
-      
-      return response;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      
-      if (Platform.OS !== 'web') {
-        Alert.alert('Profile Update Failed', error.message);
-      }
-      
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Clear current error
-  const clearError = () => {
-    setError(null);
+  // Expose the update profile function
+  const updateProfile = async (profileData: Partial<User>) => {
+    clearError();
+    await updateProfileMutate(profileData);
   };
 
   return (
@@ -209,12 +167,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isLoading,
-        isInitialized,
+        loginLoading,
+        registerLoading,
+        profileUpdateLoading,
         error,
         login,
         register,
         logout,
         updateProfile,
+        isAuthenticated,
         clearError,
       }}
     >
@@ -224,14 +185,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 // Custom hook to use the auth context
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  
   return context;
-}
-
-export default useAuth;
+};

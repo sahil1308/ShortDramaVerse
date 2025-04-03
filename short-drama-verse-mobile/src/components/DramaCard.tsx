@@ -1,356 +1,308 @@
-import React from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  Image, 
-  TouchableOpacity, 
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   Dimensions,
-  ImageBackground
+  ImageBackground,
+  Platform,
 } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { DramaSeries } from '@/types/drama';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/drama';
 
-type DramaCardProps = {
-  item: DramaSeries;
-  size?: 'small' | 'medium' | 'large';
-  variant?: 'poster' | 'horizontal' | 'featured';
-  onPress?: () => void;
-};
+// Get window dimensions for responsive sizing
+const { width } = Dimensions.get('window');
 
-/**
- * DramaCard Component
- * 
- * Renders a card for a drama series with different variants and sizes
- * 
- * @param item - The drama series data to display
- * @param size - The size of the card (small, medium, large)
- * @param variant - The layout variant of the card (poster, horizontal, featured)
- * @param onPress - Optional custom onPress handler
- */
-const DramaCard: React.FC<DramaCardProps> = ({ 
-  item, 
-  size = 'medium', 
-  variant = 'poster',
-  onPress 
+// Different card variants
+export type DramaCardVariant = 'horizontal' | 'vertical' | 'featured' | 'small';
+
+interface DramaCardProps {
+  series: DramaSeries;
+  variant?: DramaCardVariant;
+  onPress?: () => void;
+  showRating?: boolean;
+  showGenres?: boolean;
+  index?: number;
+}
+
+const DramaCard: React.FC<DramaCardProps> = ({
+  series,
+  variant = 'vertical',
+  onPress,
+  showRating = true,
+  showGenres = true,
+  index = 0,
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const screenWidth = Dimensions.get('window').width;
+  const [isImageLoading, setIsImageLoading] = useState(true);
   
-  // Get card dimensions based on size and variant
-  const getDimensions = () => {
-    const dimensions = {
-      width: 0,
-      height: 0,
-      imageHeight: 0,
-    };
-    
+  // Calculate appropriate dimensions based on variant
+  const getCardStyle = () => {
     switch (variant) {
-      case 'poster':
-        switch (size) {
-          case 'small':
-            dimensions.width = screenWidth * 0.3;
-            dimensions.height = screenWidth * 0.45;
-            dimensions.imageHeight = screenWidth * 0.35;
-            break;
-          case 'medium':
-            dimensions.width = screenWidth * 0.4;
-            dimensions.height = screenWidth * 0.6;
-            dimensions.imageHeight = screenWidth * 0.5;
-            break;
-          case 'large':
-            dimensions.width = screenWidth * 0.5;
-            dimensions.height = screenWidth * 0.75;
-            dimensions.imageHeight = screenWidth * 0.65;
-            break;
-        }
-        break;
       case 'horizontal':
-        dimensions.width = screenWidth - 40;
-        dimensions.height = 120;
-        dimensions.imageHeight = 120;
-        break;
+        return {
+          container: [styles.container, styles.horizontalContainer],
+          image: styles.horizontalImage,
+          details: styles.horizontalDetails,
+          title: styles.horizontalTitle,
+        };
       case 'featured':
-        dimensions.width = screenWidth - 40;
-        dimensions.height = screenWidth * 0.5;
-        dimensions.imageHeight = screenWidth * 0.5;
-        break;
+        return {
+          container: [styles.container, styles.featuredContainer],
+          image: styles.featuredImage,
+          details: styles.featuredDetails,
+          title: styles.featuredTitle,
+        };
+      case 'small':
+        return {
+          container: [styles.container, styles.smallContainer],
+          image: styles.smallImage,
+          details: styles.smallDetails,
+          title: styles.smallTitle,
+        };
+      default: // vertical
+        return {
+          container: [styles.container, styles.verticalContainer],
+          image: styles.verticalImage,
+          details: styles.verticalDetails,
+          title: styles.verticalTitle,
+        };
     }
-    
-    return dimensions;
   };
   
-  const { width, height, imageHeight } = getDimensions();
+  const cardStyle = getCardStyle();
   
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     if (onPress) {
       onPress();
     } else {
-      navigation.navigate('SeriesDetails', { id: item.id });
+      navigation.navigate('SeriesDetails', { seriesId: series.id });
     }
+  }, [navigation, series.id, onPress]);
+  
+  // Render stars for rating
+  const renderRatingStars = () => {
+    if (!showRating) return null;
+    
+    const rating = Math.round(series.averageRating * 2) / 2; // Round to nearest 0.5
+    const fullStars = Math.floor(rating);
+    const halfStar = rating % 1 !== 0;
+    
+    return (
+      <View style={styles.ratingContainer}>
+        {Array(5).fill(0).map((_, i) => {
+          if (i < fullStars) {
+            return <FontAwesome key={i} name="star" size={12} color="#FFD700" />;
+          } else if (i === fullStars && halfStar) {
+            return <FontAwesome key={i} name="star-half-o" size={12} color="#FFD700" />;
+          } else {
+            return <FontAwesome key={i} name="star-o" size={12} color="#FFD700" />;
+          }
+        })}
+        <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+      </View>
+    );
   };
   
-  // Poster variant
-  if (variant === 'poster') {
-    return (
-      <TouchableOpacity 
-        style={[styles.container, { width, height }]} 
-        onPress={handlePress}
-        activeOpacity={0.8}
+  // Truncate text if too long
+  const truncateText = (text: string, maxLength: number) => {
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+  };
+  
+  return (
+    <TouchableOpacity 
+      style={cardStyle.container} 
+      onPress={handlePress}
+      activeOpacity={0.8}
+      testID={`drama-card-${series.id}`}
+    >
+      <ImageBackground
+        source={{ uri: series.coverImage }}
+        style={cardStyle.image}
+        imageStyle={{ borderRadius: 8 }}
+        onLoadStart={() => setIsImageLoading(true)}
+        onLoadEnd={() => setIsImageLoading(false)}
       >
-        <View style={styles.cardContainer}>
-          <Image 
-            source={{ uri: item.coverImage }} 
-            style={[styles.posterImage, { height: imageHeight }]} 
-            resizeMode="cover"
-          />
-          <View style={styles.infoContainer}>
-            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-            <View style={styles.ratingContainer}>
-              <MaterialIcons name="star" size={14} color="#FFD700" />
-              <Text style={styles.rating}>{item.averageRating.toFixed(1)}</Text>
-            </View>
-          </View>
-          {item.isPremium && (
+        <View style={styles.overlay}>
+          {series.isPremium && (
             <View style={styles.premiumBadge}>
               <Text style={styles.premiumText}>PREMIUM</Text>
             </View>
           )}
-        </View>
-      </TouchableOpacity>
-    );
-  }
-  
-  // Horizontal variant
-  if (variant === 'horizontal') {
-    return (
-      <TouchableOpacity 
-        style={[styles.horizontalContainer, { width, height }]} 
-        onPress={handlePress}
-        activeOpacity={0.8}
-      >
-        <Image 
-          source={{ uri: item.coverImage }} 
-          style={styles.horizontalImage} 
-          resizeMode="cover"
-        />
-        <View style={styles.horizontalInfo}>
-          <Text style={styles.horizontalTitle} numberOfLines={2}>{item.title}</Text>
-          <Text style={styles.horizontalDescription} numberOfLines={2}>{item.description}</Text>
-          <View style={styles.horizontalMeta}>
-            <View style={styles.ratingContainer}>
-              <MaterialIcons name="star" size={14} color="#FFD700" />
-              <Text style={styles.rating}>{item.averageRating.toFixed(1)}</Text>
+          
+          {series.isHot && (
+            <View style={styles.hotBadge}>
+              <Ionicons name="flame" size={12} color="#fff" />
+              <Text style={styles.hotText}>HOT</Text>
             </View>
-            <Text style={styles.year}>{item.releaseYear}</Text>
-            {item.isPremium && (
-              <View style={styles.smallPremiumBadge}>
-                <Text style={styles.smallPremiumText}>PREMIUM</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }
-  
-  // Featured variant
-  return (
-    <TouchableOpacity 
-      style={[styles.featuredContainer, { width, height: imageHeight }]} 
-      onPress={handlePress}
-      activeOpacity={0.8}
-    >
-      <ImageBackground 
-        source={{ uri: item.bannerImage || item.coverImage }} 
-        style={styles.featuredBackground}
-        resizeMode="cover"
-      >
-        <View style={styles.featuredGradient}>
-          <View style={styles.featuredContent}>
-            <Text style={styles.featuredTitle}>{item.title}</Text>
-            <View style={styles.featuredMeta}>
-              <View style={styles.ratingContainer}>
-                <MaterialIcons name="star" size={16} color="#FFD700" />
-                <Text style={styles.featuredRating}>{item.averageRating.toFixed(1)}</Text>
-              </View>
-              <Text style={styles.featuredYear}>{item.releaseYear}</Text>
-              {item.isPremium && (
-                <View style={styles.premiumBadge}>
-                  <Text style={styles.premiumText}>PREMIUM</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.featuredDescription} numberOfLines={2}>{item.description}</Text>
-          </View>
+          )}
         </View>
       </ImageBackground>
+      
+      <View style={cardStyle.details}>
+        <Text style={cardStyle.title} numberOfLines={1}>
+          {truncateText(series.title, variant === 'small' ? 15 : 20)}
+        </Text>
+        
+        {showGenres && series.genre.length > 0 && (
+          <View style={styles.genreContainer}>
+            {series.genre.slice(0, 2).map((genre, idx) => (
+              <Text key={idx} style={styles.genreText}>
+                {genre}{idx < Math.min(series.genre.length - 1, 1) ? ' • ' : ''}
+              </Text>
+            ))}
+          </View>
+        )}
+        
+        {renderRatingStars()}
+      </View>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    margin: 8,
-  },
-  cardContainer: {
+    backgroundColor: '#fff',
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  posterImage: {
-    width: '100%',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+  verticalContainer: {
+    width: width / 2 - 24, // 2 cards per row with margin
+    marginBottom: 16,
   },
-  infoContainer: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: '#222222',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rating: {
-    fontSize: 12,
-    marginLeft: 4,
-    color: '#555555',
-  },
-  premiumBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#6A5ACD',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  premiumText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  // Horizontal variant styles
   horizontalContainer: {
     flexDirection: 'row',
-    margin: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    width: width - 32,
+    height: 120,
+    marginBottom: 12,
+  },
+  featuredContainer: {
+    width: width - 32,
+    height: 200,
+    marginBottom: 16,
+  },
+  smallContainer: {
+    width: width / 3 - 16,
+    marginBottom: 12,
+  },
+  verticalImage: {
+    height: 150,
+    width: '100%',
+    justifyContent: 'flex-end',
   },
   horizontalImage: {
     width: 100,
     height: '100%',
+    justifyContent: 'flex-end',
   },
-  horizontalInfo: {
+  featuredImage: {
+    width: '100%',
+    height: 160,
+    justifyContent: 'flex-end',
+  },
+  smallImage: {
+    height: 120,
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    padding: 8,
+    justifyContent: 'space-between',
+    flexDirection: 'row',
+  },
+  verticalDetails: {
+    padding: 8,
+  },
+  horizontalDetails: {
     flex: 1,
     padding: 12,
     justifyContent: 'space-between',
   },
+  featuredDetails: {
+    padding: 12,
+  },
+  smallDetails: {
+    padding: 6,
+  },
+  verticalTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#333',
+  },
   horizontalTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
-    color: '#222222',
+    marginBottom: 6,
+    color: '#333',
   },
-  horizontalDescription: {
-    fontSize: 12,
-    color: '#555555',
+  featuredTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     marginBottom: 8,
+    color: '#333',
   },
-  horizontalMeta: {
+  smallTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+    color: '#333',
+  },
+  ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 4,
   },
-  year: {
+  ratingText: {
+    marginLeft: 4,
     fontSize: 12,
-    color: '#555555',
-    marginLeft: 12,
+    color: '#888',
   },
-  smallPremiumBadge: {
-    backgroundColor: '#6A5ACD',
+  genreContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  genreText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  premiumBadge: {
+    backgroundColor: '#FFD700',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    marginLeft: 12,
+    alignSelf: 'flex-start',
   },
-  smallPremiumText: {
-    color: 'white',
-    fontSize: 8,
+  premiumText: {
+    fontSize: 10,
     fontWeight: 'bold',
+    color: '#333',
   },
-  // Featured variant styles
-  featuredContainer: {
-    margin: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  featuredBackground: {
-    width: '100%',
-    height: '100%',
-  },
-  featuredGradient: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  featuredContent: {
-    padding: 16,
-  },
-  featuredTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  featuredMeta: {
+  hotBadge: {
+    backgroundColor: '#e74c3c',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    alignSelf: 'flex-start',
   },
-  featuredRating: {
-    fontSize: 14,
-    marginLeft: 4,
-    color: 'white',
-    fontWeight: '600',
-  },
-  featuredYear: {
-    fontSize: 14,
-    color: 'white',
-    marginLeft: 16,
-    fontWeight: '500',
-  },
-  featuredDescription: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+  hotText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 2,
   },
 });
 

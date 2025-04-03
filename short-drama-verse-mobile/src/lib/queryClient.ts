@@ -1,102 +1,119 @@
+import React from 'react';
 import { 
   QueryClient, 
-  QueryClientProvider as TanstackQueryClientProvider,
-  QueryOptions,
-  UseQueryOptions,
+  QueryClientProvider, 
+  useQuery,
   useMutation,
+  UseQueryOptions,
   UseMutationOptions,
+  QueryKey,
 } from '@tanstack/react-query';
-import { Platform, Alert } from 'react-native';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { ApiError } from '@/types/drama';
-import React from 'react';
+import axios, { AxiosError } from 'axios';
+import api from '@/services/api';
 
-// Create a client with default configurations
+// Create a client
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 30 * 60 * 1000,   // 30 minutes
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 60, // 1 hour
       refetchOnWindowFocus: false,
       refetchOnMount: true,
     },
   },
 });
 
-// Utility to make API requests
-interface ApiRequestConfig {
-  headers?: Record<string, string>;
-  params?: Record<string, any>;
-}
-
-// Generic API request function that works with the API service
-export async function apiRequest<T>(
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-  url: string,
-  data?: any,
-  config?: ApiRequestConfig
-): Promise<T> {
-  try {
-    const response = await axios({
-      method,
-      url,
-      data,
-      ...config,
-    });
-    
-    return response.data as T;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      // Format error message
-      const status = error.response.status;
-      const message = error.response.data?.message || error.message;
-      
-      const apiError: ApiError = {
-        message,
-        status,
-        errors: error.response.data?.errors,
-      };
-      
-      // For auth errors, may need to handle token refresh or logout
-      if (status === 401) {
-        // Clear stored token
-        try {
-          await AsyncStorage.removeItem('auth_token');
-        } catch (storageError) {
-          console.error('Failed to clear token:', storageError);
-        }
-      }
-      
-      // Show error on mobile devices
-      if (Platform.OS !== 'web') {
-        Alert.alert(
-          'Error',
-          message,
-          [{ text: 'OK' }]
-        );
-      }
-      
-      throw apiError;
-    }
-    
-    // Handle non-axios errors
-    const genericError = error as Error;
-    throw {
-      message: genericError.message || 'An unexpected error occurred',
-      status: 500,
-    };
+// Error handler
+export function handleError(error: any) {
+  if (error.status === 401) {
+    // Unauthorized - trigger logout or redirect to login
+    return;
   }
+
+  // Display user-friendly error message
+  const errorMessage = error.message || 'An unexpected error occurred';
+  Alert.alert('Error', errorMessage);
 }
 
-// Query context provider component
-export const QueryClientProvider: React.FC<{
-  children: React.ReactNode;
-}> = ({ children }) => {
-  return (
-    <TanstackQueryClientProvider client={queryClient}>
-      {children}
-    </TanstackQueryClientProvider>
-  );
+/**
+ * Default query function for data fetching
+ * Handles authentication and error handling
+ */
+export const defaultQueryFn = async ({ queryKey }: { queryKey: string[] }) => {
+  try {
+    // Use the first element of the query key as the endpoint
+    const endpoint = queryKey[0];
+    
+    // Get additional params from the rest of the queryKey if needed
+    const response = await api.request('GET', endpoint);
+    return response;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
+
+/**
+ * Helper function for handling API errors
+ */
+export function formatApiError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError;
+    if (axiosError.response) {
+      const data = axiosError.response.data as any;
+      return data.message || 'Server error';
+    }
+    if (axiosError.request) {
+      return 'Network error. Please check your connection.';
+    }
+  }
+  return 'An unexpected error occurred';
+}
+
+/**
+ * Custom hook for querying with automatic error handling
+ */
+export function useSafeQuery<TData = unknown, TError = Error>(
+  options: UseQueryOptions<TData, TError, TData, any>
+) {
+  return useQuery<TData, TError>({
+    ...options,
+    onError: (error) => {
+      handleError(error);
+      if (options.onError) {
+        options.onError(error);
+      }
+    },
+  });
+}
+
+/**
+ * Custom hook for mutations with automatic error handling
+ */
+export function useSafeMutation<TData = unknown, TError = Error, TVariables = void, TContext = unknown>(
+  options: UseMutationOptions<TData, TError, TVariables, TContext>
+) {
+  return useMutation<TData, TError, TVariables, TContext>({
+    ...options,
+    onError: (error, variables, context) => {
+      handleError(error);
+      if (options.onError) {
+        options.onError(error, variables, context);
+      }
+    },
+  });
+}
+
+/**
+ * React Query Provider component
+ */
+export function QueryProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}

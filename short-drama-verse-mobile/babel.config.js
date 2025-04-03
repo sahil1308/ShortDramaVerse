@@ -3,19 +3,27 @@ module.exports = function(api) {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      // Path alias plugin
       [
         'module-resolver',
         {
-          root: ['./src'],
-          extensions: ['.ios.js', '.android.js', '.js', '.ts', '.tsx', '.json'],
+          root: ['./'],
           alias: {
-            '@': './src'
+            '@': './src',
+            '@assets': './assets',
+            '@components': './src/components',
+            '@screens': './src/screens',
+            '@navigation': './src/navigation',
+            '@hooks': './src/hooks',
+            '@services': './src/services',
+            '@lib': './src/lib',
+            '@types': './src/types',
+            '@utils': './src/utils',
+            '@constants': './src/constants'
           },
-        },
+          extensions: ['.js', '.jsx', '.ts', '.tsx']
+        }
       ],
-      // For Reanimated library
-      'react-native-reanimated/plugin',
-    ],
+      'react-native-reanimated/plugin'
+    ]
   };
 };
