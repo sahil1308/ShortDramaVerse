@@ -1,88 +1,84 @@
 #!/bin/bash
 
-# This script provides a unified interface to start the ShortDramaVerse application
-# in various configurations to handle Replit's Vite host restrictions.
+# ShortDramaVerse starter script
+# This script helps you start the application in different modes
 
-# Display header
-echo "====================================================="
-echo "   ShortDramaVerse - Development Launcher   "
-echo "====================================================="
-echo ""
+set -e
 
-# Function to display menu options
-show_menu() {
-  echo "Please select a startup mode:"
-  echo ""
-  echo "1) Full Stack Mode (API + VITE via Proxy)"
-  echo "   - Starts the main server, API proxy, and Vite proxy"
-  echo "   - Best for full development experience"
-  echo ""
-  echo "2) API Server Only"
-  echo "   - Starts just the API server (backend)"
-  echo "   - Use this for API testing or when running the frontend elsewhere"
-  echo ""
-  echo "3) Client App Only"
-  echo "   - Starts a simplified HTML client that connects to the API"
-  echo "   - Use this when Vite is having host restriction issues"
-  echo ""
-  echo "4) Development Server"
-  echo "   - Starts the dev server with built-in API proxy and client"
-  echo "   - Simplified development experience without Vite"
-  echo ""
-  echo "5) API Proxy"
-  echo "   - Starts the API proxy server for testing API endpoints"
-  echo "   - Use this for API testing with a user interface"
-  echo ""
-  echo "6) Exit"
-  echo ""
-  echo "====================================================="
+# Default mode is standard (Vite)
+MODE=${1:-standard}
+
+# Kill any running servers
+function kill_servers() {
+  echo "Stopping any running servers..."
+  pkill -f "node dev-server.cjs" || true
+  pkill -f "node client-app.js" || true
+  pkill -f "tsx server/index.ts" || true
+  pkill -f "node server-only.js" || true
+  sleep 1
 }
 
-# Function to handle user selection
-handle_selection() {
-  local selection=$1
-  
-  case $selection in
-    1)
-      echo "Starting Full Stack Mode..."
-      ./start-servers.sh
-      ;;
-    2)
-      echo "Starting API Server Only..."
-      npx tsx server-only.js
-      ;;
-    3)
-      echo "Starting Client App Only..."
-      npx tsx client-app.js
-      ;;
-    4)
-      echo "Starting Development Server..."
-      npx tsx dev-server.js
-      ;;
-    5)
-      echo "Starting API Proxy..."
-      npx tsx proxy.js
-      ;;
-    6)
-      echo "Exiting..."
-      exit 0
-      ;;
-    *)
-      echo "Invalid selection. Please try again."
-      return 1
-      ;;
-  esac
-  
-  return 0
+# Display help
+function show_help() {
+  echo "ShortDramaVerse Starter Script"
+  echo "------------------------------"
+  echo "Usage: ./start.sh [mode]"
+  echo ""
+  echo "Available modes:"
+  echo "  standard   - Start with Vite development server (default)"
+  echo "  dev        - Start custom development server on port 8080"
+  echo "  client     - Start standalone client server on port 8888"
+  echo "  server     - Start API server only on port 3000"
+  echo "  all        - Start all servers (API, dev, and client)"
+  echo "  help       - Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  ./start.sh             # Start in standard mode"
+  echo "  ./start.sh dev         # Start in dev mode"
+  echo "  ./start.sh all         # Start all servers"
 }
 
-# Main loop
-while true; do
-  show_menu
-  read -p "Enter your choice [1-6]: " choice
-  echo ""
-  
-  if handle_selection $choice; then
-    break
-  fi
-done
+# Check if we should show help
+if [ "$MODE" == "help" ]; then
+  show_help
+  exit 0
+fi
+
+# Kill any running servers before starting
+kill_servers
+
+# Start the application in the specified mode
+case "$MODE" in
+  standard)
+    echo "Starting application in standard mode (Vite)..."
+    echo "Access at: http://localhost:3000"
+    npm run dev
+    ;;
+  dev)
+    echo "Starting custom development server..."
+    echo "Access at: http://localhost:8080"
+    node dev-server.cjs
+    ;;
+  client)
+    echo "Starting standalone client server..."
+    echo "Access at: http://localhost:8888"
+    node client-app.js
+    ;;
+  server)
+    echo "Starting API server only..."
+    echo "Server running at: http://localhost:3000"
+    node server-only.js
+    ;;
+  all)
+    echo "Starting all servers..."
+    echo "API server:      http://localhost:3000"
+    echo "Dev server:      http://localhost:8080"
+    echo "Client server:   http://localhost:8888"
+    ./start-all-servers.sh
+    ;;
+  *)
+    echo "Unknown mode: $MODE"
+    show_help
+    exit 1
+    ;;
+esac

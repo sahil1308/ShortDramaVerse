@@ -1,0 +1,14 @@
+{
+  "workflows": [
+    {
+      "name": "Start development server",
+      "command": "node dev-server.cjs",
+      "restart_on": ["dev-server.cjs"]
+    },
+    {
+      "name": "Start all servers",
+      "command": "./start-all-servers.sh",
+      "restart_on": ["start-all-servers.sh", "client-app.js", "server-only.js", "dev-server.cjs"]
+    }
+  ]
+}

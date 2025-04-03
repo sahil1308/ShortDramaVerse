@@ -1,158 +1,161 @@
-# ShortDramaVerse Usage Guide
+# ShortDramaVerse - User Guide
 
-This guide explains how to use the ShortDramaVerse application in different development and testing configurations.
+This document provides instructions on how to use the ShortDramaVerse streaming platform.
 
-## Development Environment Options
+## Getting Started
 
-ShortDramaVerse provides multiple server configurations to facilitate development and testing in various environments, including Replit, which has certain restrictions with Vite's host configuration.
+### Creating an Account
 
-### Main Application Server
+1. Navigate to the authentication page at `/auth`
+2. Click on the "Register" tab
+3. Fill in your details:
+   - Username (required)
+   - Email (required)
+   - Password (minimum 8 characters)
+   - Display Name (optional)
+4. Click "Register" to create your account
+5. You will be automatically logged in and redirected to the home page
 
-The primary application server, which runs both the React frontend and Express backend:
+### Logging In
 
-```bash
-npm run dev
-# or
-./start.sh
-```
+1. Navigate to the authentication page at `/auth`
+2. Enter your username and password
+3. Click "Login"
+4. You will be redirected to the home page
 
-This option uses Vite's development server with HMR (Hot Module Replacement) and serves the application on the default port.
+## Using the Application
 
-### Client-Only Application
+### Browsing Content
 
-A simplified client application that connects to the main API:
+#### Home Page
 
-```bash
-./start-client.sh
-```
+The home page displays:
+- Featured content carousel
+- Recently added series
+- Popular series
+- Recommendations based on your watch history
+- Genre-specific collections
 
-- **Port**: 8888
-- **Features**: 
-  - Full React frontend UI
-  - Connects to the API running on port 3000
-  - Useful for testing UI changes independently
+Use the navigation menu to access different sections of the application.
 
-### Development Testing Server
+#### Search
 
-A dedicated testing server with helpful tools for API testing:
+1. Click the search icon in the navigation bar
+2. Enter keywords related to the content you're looking for
+3. Results will appear as you type, showing matching series
 
-```bash
-./start-dev-server.sh
-```
+### Watching Content
 
-- **Port**: 8080
-- **Features**:
-  - API endpoint testing interface
-  - Authentication testing page
-  - Detailed documentation
-  - API request examples
+#### Series Details
 
-### API Proxy Server
+1. Click on a series card to view its details
+2. The series page shows:
+   - Title and description
+   - Year and genres
+   - Average rating
+   - Episode list
+   - User ratings and reviews
 
-A simple proxy server for testing API endpoints:
+#### Episodes
 
-```bash
-node proxy.js
-```
+1. On a series page, click on an episode to start watching
+2. Free episodes can be played immediately
+3. For premium (locked) episodes:
+   - If you have enough coins, you can unlock the episode
+   - If not, you'll be prompted to purchase coins
 
-- **Port**: 3333
-- **Features**:
-  - API endpoint forwarding
-  - Minimal interface for API testing
-  - Useful for direct API access
+#### Player Controls
 
-### Server-Only Mode
+The video player includes:
+- Play/Pause
+- Volume control
+- Fullscreen toggle
+- Progress bar
+- Playback speed adjustment
 
-Run only the backend API server:
+### Managing Your Account
 
-```bash
-node server-only.js
-```
+#### Profile
 
-- **Port**: 3000
-- **Features**:
-  - Full API functionality
-  - No frontend UI
-  - Useful for API development and testing
+Access your profile by clicking your avatar in the navigation menu. Here you can:
+- Update your profile information
+- Change your password
+- View your coin balance
 
-### All Servers Simultaneously
+#### Watchlist
 
-Start all development servers at once:
+1. To add a series to your watchlist, click the bookmark icon on a series card or series page
+2. Access your watchlist from the navigation menu
+3. Remove items by clicking the bookmark icon again
 
-```bash
-node start-dev.js
-```
+#### Watch History
 
-This command starts all the servers mentioned above, allowing you to access the application through multiple interfaces simultaneously.
+Your watch history is automatically recorded and can be accessed from your profile. It shows:
+- Series and episodes you've watched
+- Your progress in each episode
+- Date and time watched
 
-## API Endpoints
+### Premium Features
 
-### Authentication
+#### Purchasing Coins
 
-- `POST /api/register`: Create a new user account
-- `POST /api/login`: Authenticate a user
-- `POST /api/logout`: End a user session
-- `GET /api/user`: Get the current authenticated user
+1. Navigate to the coin store from your profile
+2. Select a coin package
+3. Complete the payment process
+4. Coins will be added to your balance
 
-### Content
+#### Unlocking Content
 
-- `GET /api/drama-series`: Get all drama series
-- `GET /api/drama-series/:id`: Get details for a specific series
-- `GET /api/episodes/:seriesId`: Get episodes for a series
+1. When attempting to watch a locked episode, you'll see an unlock prompt
+2. The prompt will show the coin cost
+3. Click "Unlock" to spend coins and gain access
+4. Once unlocked, the content remains available to you permanently
 
-### User Data
+## Administrator Features
 
-- `GET /api/watchlist`: Get user's watchlist
-- `POST /api/watchlist`: Add a series to watchlist
-- `DELETE /api/watchlist/:id`: Remove from watchlist
-- `GET /api/watch-history`: Get user's watch history
-- `POST /api/watch-history`: Add to watch history
+Admin users have access to additional features through the admin dashboard:
 
-### Admin
+### Content Management
 
-- `GET /api/admin/users`: Get all users
-- `GET /api/admin/ads`: Get all advertisements
-- `POST /api/admin/ads`: Create a new advertisement
+- Add, edit, or remove drama series
+- Manage episodes for each series
+- Set pricing for premium content
+- Upload and manage video content
 
-## Development Testing
+### User Management
 
-The Development Testing Server (port 8080) provides several useful testing pages:
+- View and manage user accounts
+- Reset user passwords
+- Adjust user coin balances
+- Grant or revoke admin privileges
 
-- **Home Page**: Overview of available testing tools
-- **API Tester**: Interface for testing API endpoints
-- **Authentication**: Test user registration and login
-- **About**: Information about the development environment
+### Analytics
+
+- View platform usage statistics
+- Monitor content performance
+- Track revenue from coin purchases
 
 ## Troubleshooting
 
-### Connection Issues
+### Common Issues
 
-If you experience connection issues with the main application server:
+1. **Can't log in**
+   - Verify your username and password
+   - Make sure you're using the correct credentials
+   - Try resetting your password
 
-1. Try using the Client-Only Application (`./start-client.sh`)
-2. Ensure the API server is running (`node server-only.js`)
-3. Check the API using the Development Testing Server (`./start-dev-server.sh`)
+2. **Video playback issues**
+   - Check your internet connection
+   - Try refreshing the page
+   - Clear your browser cache
 
-### Authentication Problems
+3. **Payment problems**
+   - Verify your payment information
+   - Check if your bank is blocking the transaction
+   - Contact support for assistance
 
-If you experience authentication issues:
+### Getting Help
 
-1. Visit the Authentication page on the Development Testing Server (http://localhost:8080/auth)
-2. Test logging in or registering a new account
-3. Verify session cookies are being set properly
-
-### API Errors
-
-For API-related errors:
-
-1. Use the API Tester page (http://localhost:8080/api-test) to test specific endpoints
-2. Check the server logs for error messages
-3. Verify the request payload matches the expected format
-
-## Mobile Development
-
-ShortDramaVerse is designed to be mobile-responsive. To test the mobile experience:
-
-1. Start the application using any of the server options
-2. Use your browser's device emulation tools (available in Chrome DevTools)
-3. Test the responsive layout on various device sizes
+For additional support, contact us through:
+- The in-app help center
+- Email: support@shortdramaverse.example.com

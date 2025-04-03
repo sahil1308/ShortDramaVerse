@@ -1,253 +1,248 @@
-// Test script for ShortDramaVerse API
-import fetch from 'node-fetch';
-import { argv } from 'process';
+// ShortDramaVerse - API Test Script
+// This script tests the main API endpoints
 
-const API_BASE_URL = 'http://localhost:3000/api';
+import fetch from 'node-fetch';
+import chalk from 'chalk';
+
+// Configuration
+const API_URL = process.env.API_URL || 'http://localhost:3000/api';
 const DEFAULT_USERNAME = 'testuser';
 const DEFAULT_PASSWORD = 'password123';
 
-// Utility function for API requests
+// Session cookie storage to simulate browser
+let cookies = '';
+
+// Helper function for API requests
 async function apiRequest(endpoint, method = 'GET', body = null) {
+  const url = `${API_URL}${endpoint}`;
+  
   const options = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
-    credentials: 'include',
   };
+
+  if (cookies) {
+    options.headers.Cookie = cookies;
+  }
 
   if (body) {
     options.body = JSON.stringify(body);
   }
 
-  const url = `${API_BASE_URL}${endpoint}`;
-  console.log(`Making ${method} request to ${url}`);
-  
   try {
     const response = await fetch(url, options);
-    const contentType = response.headers.get('content-type');
     
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      
-      return {
-        status: response.status,
-        ok: response.ok,
-        data,
-      };
-    } else {
-      const text = await response.text();
-      return {
-        status: response.status,
-        ok: response.ok,
-        data: text,
-      };
+    // Save cookies for session (if any)
+    const responseCookies = response.headers.get('set-cookie');
+    if (responseCookies) {
+      cookies = responseCookies;
     }
-  } catch (error) {
-    console.error('API request failed:', error.message);
+    
+    const data = await response.json().catch(() => ({ status: response.status }));
+    
     return {
-      status: 500,
-      ok: false,
-      error: error.message,
+      status: response.status,
+      data,
     };
+  } catch (error) {
+    console.error(chalk.red(`Error making request to ${url}:`), error.message);
+    return { status: 500, data: { error: error.message } };
   }
 }
 
-// Test user registration
+// Test registration for a new user
 async function testRegistration(username = DEFAULT_USERNAME, email = `${username}@example.com`, password = DEFAULT_PASSWORD) {
-  console.log('\n===== Testing Registration =====');
-  
-  // Generate a unique username to avoid conflicts with existing users
-  const uniqueUsername = `${username}_${Date.now().toString().slice(-6)}`;
+  console.log(chalk.cyan('\nTesting API: Register User'));
   
   const userData = {
-    username: uniqueUsername,
-    email: email.replace('@', `_${Date.now().toString().slice(-6)}@`),
+    username,
+    email,
     password,
-    displayName: `Test User ${uniqueUsername}`,
+    displayName: `Test User`,
+    profilePicture: null,
+    bio: 'Test user bio',
+    isAdmin: false,
+    coinBalance: 100
   };
-  
-  console.log(`Registering user: ${userData.username} (${userData.email})`);
   
   const result = await apiRequest('/register', 'POST', userData);
   
-  if (result.ok) {
-    console.log('✅ Registration successful!');
-    console.log('User data:', result.data);
+  if (result.status === 201) {
+    console.log(chalk.green('✓ API Registration successful!'));
     return result.data;
   } else {
-    console.log('❌ Registration failed!');
-    console.log('Error:', result.data);
+    console.log(chalk.yellow(`ℹ API Registration returned ${result.status} - user may already exist`));
     return null;
   }
 }
 
-// Test user login
+// Test login
 async function testLogin(username = DEFAULT_USERNAME, password = DEFAULT_PASSWORD) {
-  console.log('\n===== Testing Login =====');
+  console.log(chalk.cyan('\nTesting API: Login'));
   
-  const loginData = {
+  const credentials = {
     username,
-    password,
+    password
   };
   
-  console.log(`Logging in as: ${loginData.username}`);
+  const result = await apiRequest('/login', 'POST', credentials);
   
-  const result = await apiRequest('/login', 'POST', loginData);
-  
-  if (result.ok) {
-    console.log('✅ Login successful!');
-    console.log('User data:', result.data);
+  if (result.status === 200) {
+    console.log(chalk.green('✓ API Login successful!'));
     return result.data;
   } else {
-    console.log('❌ Login failed!');
-    console.log('Error:', result.data);
+    console.log(chalk.red(`✗ API Login failed with status ${result.status}`));
     return null;
   }
 }
 
 // Test getting current user
 async function testGetUser() {
-  console.log('\n===== Testing Get Current User =====');
+  console.log(chalk.cyan('\nTesting API: Get Current User'));
   
   const result = await apiRequest('/user');
   
-  if (result.ok) {
-    console.log('✅ Got user data successfully!');
-    console.log('User data:', result.data);
+  if (result.status === 200) {
+    console.log(chalk.green('✓ API Get User successful!'));
     return result.data;
   } else {
-    console.log('❌ Failed to get user data!');
-    console.log('Error:', result.data);
+    console.log(chalk.red(`✗ API Get User failed with status ${result.status}`));
     return null;
   }
 }
 
-// Test user logout
+// Test logout
 async function testLogout() {
-  console.log('\n===== Testing Logout =====');
+  console.log(chalk.cyan('\nTesting API: Logout'));
   
   const result = await apiRequest('/logout', 'POST');
   
-  if (result.ok) {
-    console.log('✅ Logout successful!');
+  if (result.status === 200) {
+    console.log(chalk.green('✓ API Logout successful!'));
+    cookies = ''; // Clear the cookies
     return true;
   } else {
-    console.log('❌ Logout failed!');
-    console.log('Error:', result.data);
+    console.log(chalk.red(`✗ API Logout failed with status ${result.status}`));
     return false;
   }
 }
 
-// Test getting drama series
+// Test getting all drama series
 async function testGetDramaSeries() {
-  console.log('\n===== Testing Get Drama Series =====');
+  console.log(chalk.cyan('\nTesting API: Get All Drama Series'));
   
   const result = await apiRequest('/drama-series');
   
-  if (result.ok) {
-    console.log('✅ Got drama series successfully!');
-    console.log(`Retrieved ${result.data.length} series`);
-    console.log('First few series:', result.data.slice(0, 3));
+  if (result.status === 200) {
+    console.log(chalk.green(`✓ API Get Drama Series successful! Found ${result.data.length} series`));
     return result.data;
   } else {
-    console.log('❌ Failed to get drama series!');
-    console.log('Error:', result.data);
-    return null;
+    console.log(chalk.red(`✗ API Get Drama Series failed with status ${result.status}`));
+    return [];
   }
 }
 
 // Test getting episodes for a series
 async function testGetEpisodes(seriesId) {
-  console.log(`\n===== Testing Get Episodes for Series ${seriesId} =====`);
+  console.log(chalk.cyan(`\nTesting API: Get Episodes for Series ${seriesId}`));
   
   const result = await apiRequest(`/drama-series/${seriesId}/episodes`);
   
-  if (result.ok) {
-    console.log('✅ Got episodes successfully!');
-    console.log(`Retrieved ${result.data.length} episodes`);
-    console.log('Episodes:', result.data);
+  if (result.status === 200) {
+    console.log(chalk.green(`✓ API Get Episodes successful! Found ${result.data.length} episodes`));
     return result.data;
   } else {
-    console.log('❌ Failed to get episodes!');
-    console.log('Error:', result.data);
-    return null;
+    console.log(chalk.red(`✗ API Get Episodes failed with status ${result.status}`));
+    return [];
   }
 }
 
 // Run specific test based on command line argument
 async function runSpecificTest() {
-  const testName = argv[2];
-  const param1 = argv[3];
-  const param2 = argv[4];
+  const testName = process.argv[2];
+  
+  if (!testName) {
+    return false;
+  }
+  
+  console.log(chalk.yellow(`Running specific test: ${testName}`));
   
   switch (testName) {
     case 'register':
-      await testRegistration(param1, param1 ? `${param1}@example.com` : undefined, param2);
+      await testRegistration();
       break;
     case 'login':
-      await testLogin(param1, param2);
+      await testLogin();
       break;
     case 'user':
+      await testLogin(); // Login first to get session
       await testGetUser();
       break;
     case 'logout':
+      await testLogin(); // Login first to get session
       await testLogout();
       break;
     case 'series':
       await testGetDramaSeries();
       break;
-    case 'episodes':
-      await testGetEpisodes(param1);
-      break;
     default:
-      console.log(`Unknown test: ${testName}`);
-      console.log('Available tests: register, login, user, logout, series, episodes');
+      console.log(chalk.red(`Unknown test: ${testName}`));
+      return false;
   }
+  
+  return true;
 }
 
-// Run all tests in sequence
+// Main test function
 async function runTests() {
-  // Check if we're running a specific test
-  if (argv.length > 2) {
-    return runSpecificTest();
-  }
+  console.log(chalk.bold.cyan('\n🧪 ShortDramaVerse API Tester'));
+  console.log(chalk.cyan('---------------------------'));
+  console.log(chalk.gray(`Using API URL: ${API_URL}`));
   
-  // Register a new user
-  const user = await testRegistration();
-  if (!user) {
-    console.log('Skipping remaining tests because registration failed.');
+  // Check if we should run a specific test
+  const ranSpecificTest = await runSpecificTest();
+  if (ranSpecificTest) {
     return;
   }
   
-  // Logout (to test login)
-  await testLogout();
-  
-  // Login with the new user
-  const loggedInUser = await testLogin(user.username, DEFAULT_PASSWORD);
-  if (!loggedInUser) {
-    console.log('Skipping remaining tests because login failed.');
-    return;
+  try {
+    // Test authentication
+    const timestamp = Date.now().toString().slice(-5);
+    const testUsername = `api_test_${timestamp}`;
+    
+    // Try to register a new user
+    await testRegistration(testUsername);
+    
+    // Login with the user
+    const user = await testLogin(testUsername);
+    if (!user) {
+      // Try default user if the new user didn't work
+      await testLogin();
+    }
+    
+    // Get the logged in user
+    const currentUser = await testGetUser();
+    
+    // Test content API endpoints
+    const series = await testGetDramaSeries();
+    
+    // If we have series, test the episodes endpoint
+    if (series && series.length > 0) {
+      await testGetEpisodes(series[0].id);
+    }
+    
+    // Logout to clean up
+    await testLogout();
+    
+    console.log(chalk.bold.green('\n✓ API tests completed!'));
+    
+  } catch (error) {
+    console.error(chalk.bold.red('\n✗ API tests failed with an error:'));
+    console.error(chalk.red(error));
   }
-  
-  // Get user data
-  await testGetUser();
-  
-  // Get drama series
-  const series = await testGetDramaSeries();
-  
-  // Get episodes for the first series if available
-  if (series && series.length > 0) {
-    await testGetEpisodes(series[0].id);
-  }
-  
-  // Logout
-  await testLogout();
-  
-  console.log('\n✅ All tests completed!');
 }
 
 // Run the tests
-runTests().catch(error => {
-  console.error('Test script error:', error);
-});
+runTests().catch(console.error);

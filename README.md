@@ -1,101 +1,127 @@
 # ShortDramaVerse
 
-ShortDramaVerse is a web-based streaming platform for short-form drama content from around the world. This application provides the core functionality for streaming drama series, user authentication, content management, and administrative tools.
+ShortDramaVerse is a web-based streaming platform for short-form drama content, designed with mobile responsiveness to function like a native mobile application.
 
 ## Features
 
-- **User Authentication**: Secure authentication system with registration, login, and session management
-- **Content Browsing**: Browse drama series by genre, popularity, and other criteria
-- **Video Streaming**: Watch episodes with progress tracking and user history
-- **Watchlist Management**: Add series to personal watchlists
+- **User Authentication**: Secure login and registration system
+- **Content Library**: Browse and search short drama series 
+- **Video Streaming**: Watch episodes with adaptive playback controls
+- **Premium Content**: Purchase locked content with virtual coins
+- **User Profiles**: Personalized user experience with watch history and watchlists
 - **Rating System**: Rate and review drama series
-- **Admin Interface**: Manage content, users, and advertisements
-- **Mobile Responsive**: Optimized for both desktop and mobile devices
-
-## Technical Architecture
-
-ShortDramaVerse is built with:
-
-- **Frontend**: React, TailwindCSS, Shadcn UI components
-- **Backend**: Express.js API server
-- **Database**: In-memory storage (configurable for PostgreSQL)
-- **Authentication**: Passport.js with local strategy
-- **Session Management**: Express-session with secure cookie handling
-- **API Integration**: React Query for data fetching
+- **Admin Dashboard**: Content management for administrators
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 16+
-- npm or yarn
-
-### Installation
+### Quick Start
 
 1. Clone the repository
-2. Install dependencies: `npm install`
-3. Start the development server: `./start.sh`
+2. Run the setup script: `./setup.sh`
+3. Start the application: `npm run dev`
+4. Open your browser to: `http://localhost:3000`
 
-### Development
+### Alternative Setup Options
 
-Multiple development server options are available to overcome Vite host restrictions in environments like Replit:
+For more detailed setup instructions, including running on different environments, see [SETUP.md](SETUP.md).
 
-- **Main Application**: `npm run dev` or `./start.sh` 
-- **Client App**: `./start-client.sh` - Simplified UI with full API functionality (port 8888)
-- **Development Server**: `./start-dev-server.sh` - Testing tools and API interface (port 8080)
-- **API Proxy**: `node proxy.js` - API testing interface (port 3333)
-- **Server-Only Mode**: `node server-only.js` - Just the API (port 3000)
-- **All Servers**: `node start-dev.js` - Starts all servers simultaneously
+### Known Issues in Replit Environment
 
-For detailed usage instructions, see [USAGE.md](USAGE.md).
+When running in the Replit environment, you may encounter a Vite host configuration error because Replit's security policies prevent the Vite development server from accepting connections from certain hosts. 
 
-For comprehensive development instructions, refer to [DEVELOPMENT.md](DEVELOPMENT.md).
+**Solutions:**
+
+1. **Use Alternative Servers:**
+   ```bash
+   # Start the custom development server (port 8080)
+   node dev-server.cjs
+   
+   # Or start a standalone client server (port 8888)
+   node client-app.js
+   
+   # Or start all servers simultaneously
+   ./start-all-servers.sh
+   ```
+
+2. **Use the Convenience Script:**
+   ```bash
+   # Start with the appropriate mode
+   ./start.sh all
+   ```
+
+These alternative servers provide workarounds for the Vite host restrictions in Replit while still allowing you to develop and test the application.
+
+## Usage
+
+### User Interface
+
+- **Home Page**: Browse featured content and recommendations
+- **Series Page**: View details about a series and its episodes
+- **Episode Player**: Watch episodes with playback controls
+- **Profile**: Manage your account, watchlist, and watch history
+- **Admin Dashboard**: Manage content and users (admin accounts only)
+
+### Content Access
+
+- Free content can be watched by any registered user
+- Premium content requires virtual coins to unlock
+- The first episodes of premium series are typically free as previews
+
+### For Developers
+
+- Check [DEVELOPMENT.md](DEVELOPMENT.md) for technical information
+- Use the provided test scripts for validating functionality
+- Test user accounts:
+  - Regular user: username `testuser`, password `password123`
+  - Admin user: username `admin`, password `password123`
+
+## Tech Stack
+
+- **Frontend**: React, TypeScript, Tailwind CSS, Shadcn UI, TanStack Query
+- **Backend**: Node.js, Express, Passport.js
+- **Data Storage**: In-memory with option for PostgreSQL via Drizzle ORM
+- **API**: RESTful API with proper authentication and session management
 
 ## Project Structure
 
-- **`/client`**: Frontend React application
-  - **`/src/components`**: Reusable UI components
-  - **`/src/hooks`**: Custom React hooks
-  - **`/src/lib`**: Utility functions and helpers
-  - **`/src/pages`**: Application pages and routes
+```
+├── client/            # Frontend React application
+├── server/            # Backend Express server
+├── shared/            # Shared code (schemas, types)
+├── scripts/           # Utility scripts
+└── docs/              # Documentation
+```
 
-- **`/server`**: Backend Express API
-  - **`/auth.ts`**: Authentication system
-  - **`/routes.ts`**: API route definitions
-  - **`/storage.ts`**: Data storage interface
+## GitHub Integration
 
-- **`/shared`**: Shared code and types
-  - **`/schema.ts`**: Database schema and types
+This project is configured to automatically sync with GitHub. Any changes made in Replit will be automatically pushed to the connected GitHub repository.
 
-## API Endpoints
+### Manual Sync
 
-### Authentication
+If you need to manually sync changes to GitHub:
 
-- `POST /api/register`: Create a new user account
-- `POST /api/login`: Authenticate a user
-- `POST /api/logout`: End a user session
-- `GET /api/user`: Get the current authenticated user
+```bash
+./sync-to-github.sh
+```
 
-### Content
+### Initial Setup
 
-- `GET /api/drama-series`: Get all drama series
-- `GET /api/drama-series/:id`: Get details for a specific series
-- `GET /api/episodes/:seriesId`: Get episodes for a series
+If you're setting up the GitHub integration for the first time:
 
-### User Data
+```bash
+./setup-github.sh
+```
 
-- `GET /api/watchlist`: Get user's watchlist
-- `POST /api/watchlist`: Add a series to watchlist
-- `DELETE /api/watchlist/:id`: Remove from watchlist
-- `GET /api/watch-history`: Get user's watch history
-- `POST /api/watch-history`: Add to watch history
+This script will create a new GitHub repository and configure automatic syncing.
 
-### Admin
+## Contributing
 
-- `GET /api/admin/users`: Get all users
-- `GET /api/admin/ads`: Get all advertisements
-- `POST /api/admin/ads`: Create a new advertisement
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-This project is licensed under the MIT License.
+This project is proprietary and not licensed for public use or distribution.
+
+## Contact
+
+For inquiries about this project, please contact the project maintainers.

@@ -4,3 +4,29 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Build files
+build/
+out/
+
+# Replit specific
+.replit.nix
+.cache/
+.upm/
+
+# Temporary files
+tmp/
+temp/
+
+# IDE files
+.idea/
+.vscode/

@@ -1,144 +1,189 @@
-# ShortDramaVerse Development Guide
+# ShortDramaVerse - Developer Guide
 
-This document provides a comprehensive guide for developing and working with the ShortDramaVerse application in the Replit environment. Due to certain host restrictions in Replit, we've implemented a flexible development setup with multiple runtime options.
+This document provides technical information and guidelines for developers working on the ShortDramaVerse platform.
 
-## Understanding the Environment
+## Architecture Overview
 
-ShortDramaVerse is a full-stack application consisting of:
+ShortDramaVerse follows a modern web application architecture with:
 
-- **Backend API**: Express.js server with authentication and data storage
-- **Frontend**: React-based client using Vite for development
+- **React frontend** with TypeScript for type safety
+- **Express backend** handling API requests
+- **Shared schemas** for consistent data validation
+- **In-memory storage** with option for PostgreSQL database
+- **Authentication** using Passport.js with sessions
 
-In Replit, we face some challenges:
+### Directory Structure
 
-1. **Vite Host Restrictions**: Vite's development server sometimes has issues with Replit's host configuration
-2. **Port Limitations**: We need to manage multiple services on different ports
-3. **Workflow Integration**: Replit's workflow system needs specific port configurations
-
-## Development Scripts
-
-We've created several scripts to help you work with the application in different modes:
-
-### `start.sh` - Main Development Launcher
-
-This script provides a menu to choose your preferred development mode:
-
-```bash
-./start.sh
+```
+├── client/             # Frontend React application
+│   ├── src/
+│   │   ├── assets/     # Static assets
+│   │   ├── components/ # Reusable UI components
+│   │   ├── hooks/      # Custom React hooks
+│   │   ├── lib/        # Utility functions
+│   │   ├── pages/      # Application pages
+│   │   └── App.tsx     # Main application component
+│
+├── server/             # Backend Express server
+│   ├── index.ts        # Server entry point
+│   ├── routes.ts       # API routes
+│   ├── auth.ts         # Authentication setup
+│   ├── storage.ts      # Data storage interface
+│   └── server-utils.ts # Server utility functions
+│
+└── shared/             # Shared code between client and server
+    └── schema.ts       # Data models and validation schemas
 ```
 
-Options include:
+## Setting Up Development Environment
 
-1. **Full Stack Mode**: Runs API server, proxies, and development servers together
-2. **API Server Only**: Runs just the backend API server
-3. **Client App Only**: Runs a simplified HTML client that connects to the API
-4. **Development Server**: Runs a custom dev server with API proxy and UI
-5. **API Proxy**: Runs an API testing interface
+### Prerequisites
 
-### Development Server Scripts
+- Node.js v16 or higher
+- npm v7 or higher
+- Git
 
-- `start-servers.sh`: Starts all server components together with proper cleanup
-- `start-dev.js`: Starts all development servers simultaneously
-- `start-client.sh`: Runs only the client application on port 8888
-- `start-dev-server.sh`: Runs the development testing server on port 8080
-- `server-only.js`: Runs only the API server on port 3000
-- `run-proxy-dev.sh`: Legacy script for starting just the proxy server
-- `test-api.js`: Script to test API endpoints from the command line
+### Initial Setup
 
-## Server Components
+1. Clone the repository
+2. Run the setup script: `./setup.sh`
+3. Start the application: `npm run dev`
 
-The application uses several server components:
+### Alternative Development Servers
 
-### Main API Server (Port 3000)
+For development scenarios requiring multiple servers:
 
-This is the core Express.js server that provides the API endpoints, authentication, and data storage. It's configured in `server/index.ts` and can run in development or production mode.
+1. **Main API Server**: `node server-only.js` (port 3000)
+2. **Development Server**: `node dev-server.cjs` (port 8080)
+3. **Client Application**: `node client-app.js` (port 8888)
+4. **All Servers**: `./start-all-servers.sh`
 
-### Development Server (Port 8080)
+## Development Guidelines
 
-A simplified HTTP server that provides:
-- API proxy to the main API server
-- Static HTML UI for basic interaction
-- Testing tools for API requests
+### Code Style
 
-### API Proxy (Port 3333)
+- Use TypeScript for type safety
+- Follow ESLint and Prettier configurations
+- Use functional components with hooks for React
+- Document complex functions and components
 
-A dedicated proxy server for testing API endpoints with:
-- UI for making API requests
-- JSON request builder
-- Response viewer
+### Frontend Development
 
-### Client App (Port 8888)
+#### Component Structure
 
-A simplified client application that:
-- Connects to the API server
-- Provides basic authentication UI
-- Displays application information
+- Use shadcn UI components when possible
+- Implement responsive design for all components
+- Create reusable components in the components directory
+- Use CSS modules or styled-components for styling
 
-## Authentication System
+#### State Management
 
-The authentication system is implemented with:
+- Use React Query for server state
+- Use React Context for global application state
+- Follow React Query patterns for data fetching and caching
 
-- **Passport.js**: For authentication middleware
-- **Express-session**: For session management
-- **Memory store**: For session storage in development
+#### Routing
 
-The main authentication endpoints are:
+- Use wouter for routing
+- Create new pages in the pages directory
+- Protect routes using the ProtectedRoute component
 
-- **POST /api/register**: Create a new user account
-- **POST /api/login**: Authenticate a user
-- **POST /api/logout**: End a user session
-- **GET /api/user**: Get the current authenticated user
+### Backend Development
 
-## Working with the Codebase
+#### API Routes
 
-### Server-Side Code
+- Create RESTful endpoints in routes.ts
+- Validate request data using Zod schemas
+- Use storage interface for all data operations
+- Return appropriate HTTP status codes
 
-- `server/routes.ts`: API route definitions
-- `server/auth.ts`: Authentication setup
-- `server/storage.ts`: Data storage interface and implementation
-- `server/server-utils.ts`: Utility functions for server creation
+#### Authentication
 
-### Development Tools
+- Authentication is handled by Passport.js
+- Session data is stored in memory or database
+- Protect sensitive routes with authentication middleware
 
-- `dev-server.js`: Development server implementation
-- `proxy.js`: API proxy implementation
-- `proxy-server.js`: Combined proxy for API and Vite
-- `client-app.js`: Simplified client application
+#### Storage
 
-## Common Development Tasks
+- Implement CRUD operations in the storage interface
+- Use in-memory storage for development
+- PostgreSQL is available for production via Drizzle ORM
 
-### Adding New API Endpoints
+### Data Schema
 
-1. Add the endpoint definition in `server/routes.ts`
-2. Implement any required storage methods in `server/storage.ts`
-3. Test the endpoint with the API Proxy or test script
+- Define models in schema.ts
+- Use Drizzle for database schema definition
+- Create validation schemas using drizzle-zod
 
-### Troubleshooting Vite Issues
+## Testing
 
-If you encounter issues with Vite in Replit:
+### Running Tests
 
-1. Stop any running servers
-2. Run `./start.sh` and select option 3 or 4
-3. Use the simplified interfaces to continue development
-4. Try running the full stack mode again after changes
+- Use the provided test scripts in the root directory
+- Test authentication: `node test-auth-components.cjs`
+- Test API endpoints: `node test-api.js`
 
-### Testing Authentication
+### Manual Testing
 
-You can test authentication using:
+For manual testing of functionality:
 
-1. The API Proxy interface
-2. The simplified client app
-3. The `test-api.js` script
+1. Start the application
+2. Register a new user or use test accounts:
+   - Regular user: username `testuser`, password `password123`
+   - Admin user: username `admin`, password `password123`
+3. Test user flows through the application
 
 ## Deployment
 
-For deployment, the application uses:
+### Environment Setup
 
-- **Express.js Static Serving**: In production mode, Express serves the built frontend
-- **Single HTTP Server**: All requests go through a single HTTP server in production
+1. Configure environment variables (see .env.example)
+2. Set up a PostgreSQL database for production
+3. Update the storage implementation to use the database
 
-To prepare for deployment:
+### Build Process
 
-1. Build the frontend: `npm run build`
-2. Set NODE_ENV to "production"
-3. Start the server: `node server/index.js`
+1. Build the client: `npm run build:client`
+2. Build the server: `npm run build:server`
+3. Deploy the built files to your hosting platform
+
+## Troubleshooting
+
+### Common Development Issues
+
+#### Vite Host Configuration
+
+If you encounter Vite host configuration issues:
+- Check that Vite is configured to allow your host
+- Use the development server `dev-server.cjs` instead
+- Configure proxying if needed
+
+#### Authentication Problems
+
+For authentication issues:
+- Check server logs for detailed errors
+- Verify that cookies are being properly set
+- Ensure credentials are being passed correctly
+
+#### Database Connectivity
+
+If using a database:
+- Verify connection string in environment variables
+- Check that database schema matches application expectations
+- Test database connection independently
+
+## Contributing
+
+1. Create a new branch for your feature or fix
+2. Make your changes following the guidelines
+3. Write tests for your changes
+4. Submit a pull request with a clear description
+5. Ensure CI passes before requesting review
+
+## Additional Resources
+
+- [React Documentation](https://reactjs.org/docs/getting-started.html)
+- [Express Documentation](https://expressjs.com/)
+- [Drizzle ORM Documentation](https://orm.drizzle.team/)
+- [TanStack Query Documentation](https://tanstack.com/query/latest)
+- [Shadcn UI Documentation](https://ui.shadcn.com/)
