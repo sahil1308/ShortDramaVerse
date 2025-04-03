@@ -1,113 +1,152 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { ApiError } from '@/types/drama';
+import { Platform, Alert } from 'react-native';
+
+// Base URL configuration
+const BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
 // API endpoints
-export const endpoints = {
+const endpoints = {
   auth: {
-    login: '/api/login',
-    register: '/api/register',
-    logout: '/api/logout',
-    user: '/api/user',
-  },
-  series: {
-    list: '/api/series',
-    detail: (id: number) => `/api/series/${id}`,
-    episodes: (id: number) => `/api/series/${id}/episodes`,
-    ratings: (id: number) => `/api/series/${id}/ratings`,
-    popular: '/api/series/popular',
-    trending: '/api/series/trending',
-    search: (query: string) => `/api/series/search?q=${encodeURIComponent(query)}`,
-  },
-  episodes: {
-    detail: (id: number) => `/api/episodes/${id}`,
-    watch: (id: number) => `/api/episodes/${id}/watch`,
+    login: '/auth/login',
+    register: '/auth/register',
+    logout: '/auth/logout',
   },
   user: {
-    watchlist: '/api/user/watchlist',
-    watchHistory: '/api/user/watch-history',
-    updateProfile: '/api/user/profile',
-    transactions: '/api/user/transactions',
+    current: '/users/me',
+    updateProfile: '/users/profile',
+    transactions: '/users/transactions',
   },
-  ratings: {
-    add: '/api/ratings',
-    update: (id: number) => `/api/ratings/${id}`,
-    delete: (id: number) => `/api/ratings/${id}`,
+  dramaSeries: {
+    list: '/drama-series',
+    detail: (id: number) => `/drama-series/${id}`,
+    episodes: (id: number) => `/drama-series/${id}/episodes`,
+    ratings: (id: number) => `/drama-series/${id}/ratings`,
+    popular: '/drama-series/popular',
+    trending: '/drama-series/trending',
+    search: (query: string) => `/drama-series/search?q=${encodeURIComponent(query)}`,
+    genres: '/drama-series/genres',
+  },
+  episodes: {
+    detail: (id: number) => `/episodes/${id}`,
+    watch: (id: number) => `/episodes/${id}/watch`,
   },
   watchlist: {
-    add: '/api/watchlist',
-    remove: (seriesId: number) => `/api/watchlist/${seriesId}`,
-    check: (seriesId: number) => `/api/watchlist/check/${seriesId}`,
+    add: '/watchlist',
+    remove: (seriesId: number) => `/watchlist/${seriesId}`,
+    check: (seriesId: number) => `/watchlist/check/${seriesId}`,
   },
-  transactions: {
-    purchase: '/api/transactions/purchase',
-    coins: '/api/transactions/coins',
+  ratings: {
+    add: '/ratings',
+    update: (id: number) => `/ratings/${id}`,
+    delete: (id: number) => `/ratings/${id}`,
+  },
+  coins: {
+    purchase: '/coins/purchase',
+    unlock: (episodeId: number) => `/coins/unlock/${episodeId}`,
+  },
+  advertisements: {
+    active: (placement: string) => `/advertisements/${placement}`,
+    click: (id: number) => `/advertisements/${id}/click`,
   },
 };
 
-// Create axios instance with base configuration
-export const api = axios.create({
-  baseURL: Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000',
+// Create axios instance with default config
+const instance = axios.create({
+  baseURL: BASE_URL,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
 });
 
-// Add token to requests
-api.interceptors.request.use(
-  async config => {
+// Add request interceptor for authorization token
+instance.interceptors.request.use(
+  async (config) => {
     const token = await AsyncStorage.getItem('auth_token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
+    
+    // Log API calls in development
+    if (__DEV__) {
+      console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+      if (config.data) {
+        console.log('Request data:', config.data);
+      }
+    }
+    
     return config;
   },
-  error => {
+  (error) => {
     return Promise.reject(error);
   }
 );
 
-// Handle responses and errors
-api.interceptors.response.use(
-  response => {
-    return response.data;
+// Add response interceptor for error handling
+instance.interceptors.response.use(
+  (response) => {
+    // Log API responses in development
+    if (__DEV__) {
+      console.log(`✅ API Response: ${response.status} ${response.config.url}`);
+    }
+    return response;
   },
-  error => {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      'An unexpected error occurred';
-
-    // For network errors
-    if (!error.response) {
-      console.error('Network error:', error);
-      return Promise.reject(new Error('Network error. Please check your connection.'));
+  async (error) => {
+    if (error.response) {
+      // Log API errors in development
+      if (__DEV__) {
+        console.error(
+          `❌ API Error: ${error.response.status} ${error.config.url}`, 
+          error.response.data
+        );
+      }
+      
+      // Handle 401 Unauthorized errors
+      if (error.response.status === 401) {
+        // Token expired or invalid, clear from storage
+        await AsyncStorage.removeItem('auth_token');
+        
+        // You can also implement token refresh logic here if needed
+      }
+      
+      const errorData = error.response.data;
+      const apiError: ApiError = {
+        message: errorData.message || 'An error occurred',
+        status: error.response.status,
+        errors: errorData.errors,
+      };
+      
+      return Promise.reject(apiError);
     }
-
-    // For authentication errors, logout user
-    if (error.response.status === 401) {
-      // Auth token might be expired, will be handled in the useAuth hook
-      console.warn('Authentication error:', error.response.data);
-    }
-
-    return Promise.reject(new Error(message));
+    
+    // Network errors or other issues
+    return Promise.reject({
+      message: error.message || 'Network error. Please check your connection.',
+      status: 0,
+    });
   }
 );
 
-// Check if error is an unauthorized error
-export const isUnauthorizedError = (error: any): boolean => {
-  return axios.isAxiosError(error) && error.response?.status === 401;
-};
+export { instance, endpoints };
 
-// Get resource URL (for images, videos, etc.)
-export const getResourceUrl = (path: string): string => {
-  // If the path is a full URL, return it as is
-  if (path.startsWith('http')) {
-    return path;
-  }
+// Export a default api object with all the methods
+export default {
+  get: <T>(url: string, config?: AxiosRequestConfig) => 
+    instance.get<T>(url, config).then(response => response.data),
   
-  // Otherwise, prepend the API base URL
-  return `${api.defaults.baseURL}${path}`;
+  post: <T>(url: string, data?: any, config?: AxiosRequestConfig) => 
+    instance.post<T>(url, data, config).then(response => response.data),
+  
+  put: <T>(url: string, data?: any, config?: AxiosRequestConfig) => 
+    instance.put<T>(url, data, config).then(response => response.data),
+  
+  patch: <T>(url: string, data?: any, config?: AxiosRequestConfig) => 
+    instance.patch<T>(url, data, config).then(response => response.data),
+  
+  delete: <T>(url: string, config?: AxiosRequestConfig) => 
+    instance.delete<T>(url, config).then(response => response.data),
 };
-
-export default api;

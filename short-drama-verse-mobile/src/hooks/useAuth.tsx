@@ -1,155 +1,144 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQueryClient } from '@tanstack/react-query';
+import { User, AuthCredentials, RegisterCredentials, ProfileUpdateFormData } from '@/types/drama';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { 
-  User, 
-  AuthCredentials, 
-  RegisterCredentials, 
-  RootStackParamList 
-} from '@/types/drama';
+import { RootStackParamList } from '@/types/drama';
+import { queryClient } from '@/lib/queryClient';
 import { apiRequest } from '@/lib/queryClient';
 import { endpoints } from '@/services/api';
 
-// Keys for AsyncStorage
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
+// Keys for local storage
+const USER_STORAGE_KEY = 'auth_user';
+const TOKEN_STORAGE_KEY = 'auth_token';
 
-// Auth context type definition
+// AuthContext type
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
-  error: string | null;
-  login: (credentials: AuthCredentials) => Promise<void>;
-  register: (credentials: RegisterCredentials) => Promise<void>;
+  error: Error | null;
+  login: (credentials: AuthCredentials) => Promise<User>;
+  register: (userData: RegisterCredentials) => Promise<User>;
   logout: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
+  updateProfile: (data: ProfileUpdateFormData) => Promise<User>;
   clearError: () => void;
 }
 
 // Create context with default values
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  isLoading: false,
-  isInitialized: false,
-  error: null,
-  login: async () => {},
-  register: async () => {},
-  logout: async () => {},
-  updateProfile: async () => {},
-  clearError: () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Custom hook to use auth context
-export const useAuth = () => useContext(AuthContext);
-
+// Provider component for AuthContext
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  
+  const [error, setError] = useState<Error | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const queryClient = useQueryClient();
 
-  // Initialize auth state from AsyncStorage
+  // Initialize auth state from storage
   useEffect(() => {
-    const initialize = async () => {
+    const initializeAuth = async () => {
       try {
-        const storedUser = await AsyncStorage.getItem(USER_KEY);
+        const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
         if (storedUser) {
           setUser(JSON.parse(storedUser));
         }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
+      } catch (err) {
+        console.error('Error restoring auth state:', err);
       } finally {
         setIsInitialized(true);
       }
     };
 
-    initialize();
+    initializeAuth();
   }, []);
 
-  // Save user to AsyncStorage
-  const saveUserToStorage = async (user: User) => {
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
-    setUser(user);
-  };
-
-  // Save token to AsyncStorage
-  const saveTokenToStorage = async (token: string) => {
-    await AsyncStorage.setItem(TOKEN_KEY, token);
-  };
-
-  // Clear auth data from AsyncStorage
-  const clearAuthData = async () => {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    await AsyncStorage.removeItem(USER_KEY);
-    setUser(null);
-  };
-
-  // Login function
-  const login = async (credentials: AuthCredentials) => {
+  // Login method
+  const login = async (credentials: AuthCredentials): Promise<User> => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiRequest<{user: User; token: string}>('POST', endpoints.auth.login, credentials);
+      const response = await apiRequest<User>(
+        'POST',
+        endpoints.auth.login,
+        credentials
+      );
+
+      // Store user data
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
+      setUser(response);
       
-      await saveTokenToStorage(response.token);
-      await saveUserToStorage(response.user);
+      // Invalidate queries that might depend on auth state
+      queryClient.invalidateQueries({ queryKey: [endpoints.user.current] });
       
-      // Navigate to main screen after successful login
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
-    } catch (error: any) {
-      setError(error.message || 'Failed to login. Please try again.');
-      Alert.alert('Login Failed', error.message || 'Failed to login. Please try again.');
+      return response;
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
+      
+      if (Platform.OS !== 'web') {
+        Alert.alert('Login Failed', error.message);
+      }
+      
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Register function
-  const register = async (credentials: RegisterCredentials) => {
+  // Register method
+  const register = async (userData: RegisterCredentials): Promise<User> => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiRequest<{user: User; token: string}>('POST', endpoints.auth.register, credentials);
+      const response = await apiRequest<User>(
+        'POST',
+        endpoints.auth.register,
+        userData
+      );
+
+      // Store user data
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
+      setUser(response);
       
-      await saveTokenToStorage(response.token);
-      await saveUserToStorage(response.user);
+      // Invalidate queries that might depend on auth state
+      queryClient.invalidateQueries({ queryKey: [endpoints.user.current] });
       
-      // Navigate to main screen after successful registration
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
-    } catch (error: any) {
-      setError(error.message || 'Failed to register. Please try again.');
-      Alert.alert('Registration Failed', error.message || 'Failed to register. Please try again.');
+      return response;
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
+      
+      if (Platform.OS !== 'web') {
+        Alert.alert('Registration Failed', error.message);
+      }
+      
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Logout function
-  const logout = async () => {
+  // Logout method
+  const logout = async (): Promise<void> => {
     setIsLoading(true);
-    
+    setError(null);
+
     try {
       await apiRequest('POST', endpoints.auth.logout);
       
-      // Clear local state and storage
-      await clearAuthData();
+      // Clear stored user data
+      await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
       
-      // Clear all queries from cache
+      // Reset user state
+      setUser(null);
+      
+      // Clear all queries in the cache
       queryClient.clear();
       
       // Navigate to auth screen
@@ -157,10 +146,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         index: 0,
         routes: [{ name: 'AuthStack' }],
       });
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
       console.error('Logout error:', error);
-      // Even if API logout fails, we clear local data
-      await clearAuthData();
+      
+      // Even if the API call fails, we still want to clear local state
+      await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+      setUser(null);
       
       navigation.reset({
         index: 0,
@@ -172,28 +166,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Update user profile
-  const updateProfile = async (data: Partial<User>) => {
+  const updateProfile = async (data: ProfileUpdateFormData): Promise<User> => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const updatedUser = await apiRequest<User>('PATCH', endpoints.user.updateProfile, data);
-      await saveUserToStorage(updatedUser);
+      const response = await apiRequest<User>(
+        'PATCH',
+        endpoints.user.updateProfile,
+        data
+      );
+
+      // Update stored user data
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response));
+      setUser(response);
       
-      // Invalidate user-related queries
-      queryClient.invalidateQueries({ queryKey: ['auth-user'] });
+      // Invalidate user data queries
+      queryClient.invalidateQueries({ queryKey: [endpoints.user.current] });
       
-      Alert.alert('Success', 'Profile updated successfully');
-    } catch (error: any) {
-      setError(error.message || 'Failed to update profile. Please try again.');
-      Alert.alert('Update Failed', error.message || 'Failed to update profile. Please try again.');
+      return response;
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
+      
+      if (Platform.OS !== 'web') {
+        Alert.alert('Profile Update Failed', error.message);
+      }
+      
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Clear error state
-  const clearError = () => setError(null);
+  // Clear current error
+  const clearError = () => {
+    setError(null);
+  };
 
   return (
     <AuthContext.Provider
@@ -214,4 +223,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export default AuthProvider;
+// Custom hook to use the auth context
+export function useAuth() {
+  const context = useContext(AuthContext);
+  
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  
+  return context;
+}
+
+export default useAuth;

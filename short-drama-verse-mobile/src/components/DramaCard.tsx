@@ -1,317 +1,356 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  Image, 
+  TouchableOpacity, 
+  Dimensions,
+  ImageBackground
+} from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { DramaSeries } from '@/types/drama';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/drama';
-import { getResourceUrl } from '@/services/api';
 
-export type DramaCardSize = 'small' | 'medium' | 'large' | 'featured';
-export type DramaCardLayout = 'grid' | 'horizontal' | 'vertical';
-
-interface DramaCardProps {
-  series: DramaSeries;
-  size?: DramaCardSize;
-  layout?: DramaCardLayout;
-  showRating?: boolean;
-  showTitle?: boolean;
-  onPress?: (series: DramaSeries) => void;
-  onLongPress?: (series: DramaSeries) => void;
-  isInWatchlist?: boolean;
-  onToggleWatchlist?: (series: DramaSeries) => void;
-}
+type DramaCardProps = {
+  item: DramaSeries;
+  size?: 'small' | 'medium' | 'large';
+  variant?: 'poster' | 'horizontal' | 'featured';
+  onPress?: () => void;
+};
 
 /**
- * DramaCard component for displaying a drama series
- * Supports different sizes and layouts
+ * DramaCard Component
+ * 
+ * Renders a card for a drama series with different variants and sizes
+ * 
+ * @param item - The drama series data to display
+ * @param size - The size of the card (small, medium, large)
+ * @param variant - The layout variant of the card (poster, horizontal, featured)
+ * @param onPress - Optional custom onPress handler
  */
-const DramaCard: React.FC<DramaCardProps> = ({
-  series,
-  size = 'medium',
-  layout = 'vertical',
-  showRating = true,
-  showTitle = true,
-  onPress,
-  onLongPress,
-  isInWatchlist,
-  onToggleWatchlist,
+const DramaCard: React.FC<DramaCardProps> = ({ 
+  item, 
+  size = 'medium', 
+  variant = 'poster',
+  onPress 
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { width } = Dimensions.get('window');
-
-  // Calculate card dimensions based on size and layout
-  const getCardDimensions = () => {
-    switch (size) {
-      case 'small':
-        return layout === 'horizontal' 
-          ? { width: width * 0.3, height: 100 } 
-          : { width: width * 0.3, height: 160 };
-      case 'medium':
-        return layout === 'horizontal' 
-          ? { width: width * 0.45, height: 120 } 
-          : { width: width * 0.4, height: 220 };
-      case 'large':
-        return layout === 'horizontal' 
-          ? { width: width * 0.6, height: 140 } 
-          : { width: width * 0.5, height: 280 };
+  const screenWidth = Dimensions.get('window').width;
+  
+  // Get card dimensions based on size and variant
+  const getDimensions = () => {
+    const dimensions = {
+      width: 0,
+      height: 0,
+      imageHeight: 0,
+    };
+    
+    switch (variant) {
+      case 'poster':
+        switch (size) {
+          case 'small':
+            dimensions.width = screenWidth * 0.3;
+            dimensions.height = screenWidth * 0.45;
+            dimensions.imageHeight = screenWidth * 0.35;
+            break;
+          case 'medium':
+            dimensions.width = screenWidth * 0.4;
+            dimensions.height = screenWidth * 0.6;
+            dimensions.imageHeight = screenWidth * 0.5;
+            break;
+          case 'large':
+            dimensions.width = screenWidth * 0.5;
+            dimensions.height = screenWidth * 0.75;
+            dimensions.imageHeight = screenWidth * 0.65;
+            break;
+        }
+        break;
+      case 'horizontal':
+        dimensions.width = screenWidth - 40;
+        dimensions.height = 120;
+        dimensions.imageHeight = 120;
+        break;
       case 'featured':
-        return layout === 'horizontal' 
-          ? { width: width * 0.9, height: 180 } 
-          : { width: width - 32, height: 200 };
+        dimensions.width = screenWidth - 40;
+        dimensions.height = screenWidth * 0.5;
+        dimensions.imageHeight = screenWidth * 0.5;
+        break;
     }
+    
+    return dimensions;
   };
-
-  const dimensions = getCardDimensions();
-
-  // Determine font size based on card size
-  const getTitleFontSize = () => {
-    switch (size) {
-      case 'small':
-        return 12;
-      case 'medium':
-        return 14;
-      case 'large':
-        return 16;
-      case 'featured':
-        return 18;
-    }
-  };
-
+  
+  const { width, height, imageHeight } = getDimensions();
+  
   const handlePress = () => {
     if (onPress) {
-      onPress(series);
+      onPress();
     } else {
-      navigation.navigate('SeriesDetails', { id: series.id });
+      navigation.navigate('SeriesDetails', { id: item.id });
     }
   };
-
-  const handleLongPress = () => {
-    if (onLongPress) {
-      onLongPress(series);
-    }
-  };
-
-  const handleWatchlistToggle = (e: any) => {
-    e.stopPropagation();
-    if (onToggleWatchlist) {
-      onToggleWatchlist(series);
-    }
-  };
-
-  const renderHorizontalLayout = () => {
+  
+  // Poster variant
+  if (variant === 'poster') {
     return (
-      <TouchableOpacity
-        style={[styles.horizontalContainer, { width: dimensions.width, height: dimensions.height }]}
+      <TouchableOpacity 
+        style={[styles.container, { width, height }]} 
         onPress={handlePress}
-        onLongPress={handleLongPress}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <Image
-          source={{ uri: getResourceUrl(series.coverImage) }}
-          style={styles.horizontalImage}
-          resizeMode="cover"
-        />
-        <View style={styles.horizontalContent}>
-          {showTitle && (
-            <Text style={[styles.title, { fontSize: getTitleFontSize() }]} numberOfLines={2}>
-              {series.title}
-            </Text>
-          )}
-          {showRating && series.averageRating && (
-            <View style={styles.ratingContainer}>
-              <Ionicons name="star" size={12} color="#FFD700" />
-              <Text style={styles.rating}>{series.averageRating.toFixed(1)}</Text>
-            </View>
-          )}
-          {size !== 'small' && (
-            <Text style={styles.info} numberOfLines={1}>
-              {series.releaseYear} • {series.genre[0]}
-            </Text>
-          )}
-          {(size === 'large' || size === 'featured') && (
-            <Text style={styles.description} numberOfLines={2}>
-              {series.description}
-            </Text>
-          )}
-        </View>
-        {onToggleWatchlist && (
-          <TouchableOpacity
-            style={styles.watchlistButton}
-            onPress={handleWatchlistToggle}
-            hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          >
-            <MaterialIcons 
-              name={isInWatchlist ? "bookmark" : "bookmark-outline"} 
-              size={24} 
-              color={isInWatchlist ? "#E50914" : "#FFFFFF"} 
-            />
-          </TouchableOpacity>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const renderVerticalLayout = () => {
-    return (
-      <TouchableOpacity
-        style={[styles.verticalContainer, { width: dimensions.width }]}
-        onPress={handlePress}
-        onLongPress={handleLongPress}
-        activeOpacity={0.7}
-      >
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: getResourceUrl(series.coverImage) }}
-            style={[styles.verticalImage, { height: dimensions.height * 0.75 }]}
+        <View style={styles.cardContainer}>
+          <Image 
+            source={{ uri: item.coverImage }} 
+            style={[styles.posterImage, { height: imageHeight }]} 
             resizeMode="cover"
           />
-          {series.isExclusive && (
-            <View style={styles.exclusiveBadge}>
-              <Text style={styles.exclusiveText}>EXCLUSIVE</Text>
+          <View style={styles.infoContainer}>
+            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+            <View style={styles.ratingContainer}>
+              <MaterialIcons name="star" size={14} color="#FFD700" />
+              <Text style={styles.rating}>{item.averageRating.toFixed(1)}</Text>
+            </View>
+          </View>
+          {item.isPremium && (
+            <View style={styles.premiumBadge}>
+              <Text style={styles.premiumText}>PREMIUM</Text>
             </View>
           )}
-          {onToggleWatchlist && (
-            <TouchableOpacity
-              style={styles.watchlistButton}
-              onPress={handleWatchlistToggle}
-              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-            >
-              <MaterialIcons 
-                name={isInWatchlist ? "bookmark" : "bookmark-outline"} 
-                size={24} 
-                color={isInWatchlist ? "#E50914" : "#FFFFFF"} 
-              />
-            </TouchableOpacity>
-          )}
         </View>
-        <View style={styles.verticalContent}>
-          {showTitle && (
-            <Text style={[styles.title, { fontSize: getTitleFontSize() }]} numberOfLines={2}>
-              {series.title}
-            </Text>
-          )}
-          <View style={styles.infoRow}>
-            {showRating && series.averageRating && (
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={12} color="#FFD700" />
-                <Text style={styles.rating}>{series.averageRating.toFixed(1)}</Text>
+      </TouchableOpacity>
+    );
+  }
+  
+  // Horizontal variant
+  if (variant === 'horizontal') {
+    return (
+      <TouchableOpacity 
+        style={[styles.horizontalContainer, { width, height }]} 
+        onPress={handlePress}
+        activeOpacity={0.8}
+      >
+        <Image 
+          source={{ uri: item.coverImage }} 
+          style={styles.horizontalImage} 
+          resizeMode="cover"
+        />
+        <View style={styles.horizontalInfo}>
+          <Text style={styles.horizontalTitle} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.horizontalDescription} numberOfLines={2}>{item.description}</Text>
+          <View style={styles.horizontalMeta}>
+            <View style={styles.ratingContainer}>
+              <MaterialIcons name="star" size={14} color="#FFD700" />
+              <Text style={styles.rating}>{item.averageRating.toFixed(1)}</Text>
+            </View>
+            <Text style={styles.year}>{item.releaseYear}</Text>
+            {item.isPremium && (
+              <View style={styles.smallPremiumBadge}>
+                <Text style={styles.smallPremiumText}>PREMIUM</Text>
               </View>
-            )}
-            {size !== 'small' && (
-              <Text style={styles.info} numberOfLines={1}>
-                {series.releaseYear} • {series.genre[0]}
-              </Text>
             )}
           </View>
         </View>
       </TouchableOpacity>
     );
-  };
-
-  return layout === 'horizontal' ? renderHorizontalLayout() : renderVerticalLayout();
+  }
+  
+  // Featured variant
+  return (
+    <TouchableOpacity 
+      style={[styles.featuredContainer, { width, height: imageHeight }]} 
+      onPress={handlePress}
+      activeOpacity={0.8}
+    >
+      <ImageBackground 
+        source={{ uri: item.bannerImage || item.coverImage }} 
+        style={styles.featuredBackground}
+        resizeMode="cover"
+      >
+        <View style={styles.featuredGradient}>
+          <View style={styles.featuredContent}>
+            <Text style={styles.featuredTitle}>{item.title}</Text>
+            <View style={styles.featuredMeta}>
+              <View style={styles.ratingContainer}>
+                <MaterialIcons name="star" size={16} color="#FFD700" />
+                <Text style={styles.featuredRating}>{item.averageRating.toFixed(1)}</Text>
+              </View>
+              <Text style={styles.featuredYear}>{item.releaseYear}</Text>
+              {item.isPremium && (
+                <View style={styles.premiumBadge}>
+                  <Text style={styles.premiumText}>PREMIUM</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.featuredDescription} numberOfLines={2}>{item.description}</Text>
+          </View>
+        </View>
+      </ImageBackground>
+    </TouchableOpacity>
+  );
 };
 
 const styles = StyleSheet.create({
-  // Horizontal layout styles
-  horizontalContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#18181B',
+  container: {
+    margin: 8,
+  },
+  cardContainer: {
     borderRadius: 8,
     overflow: 'hidden',
-    marginBottom: 12,
-    elevation: 2,
+    backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    elevation: 3,
   },
-  horizontalImage: {
-    width: '40%',
-    height: '100%',
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
-  },
-  horizontalContent: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  
-  // Vertical layout styles
-  verticalContainer: {
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  imageContainer: {
-    position: 'relative',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  verticalImage: {
+  posterImage: {
     width: '100%',
-    borderRadius: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
   },
-  verticalContent: {
+  infoContainer: {
     padding: 8,
-    paddingBottom: 12,
   },
-  
-  // Shared styles
   title: {
-    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
     marginBottom: 4,
+    color: '#222222',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
   },
   rating: {
-    color: '#FFFFFF',
     fontSize: 12,
     marginLeft: 4,
+    color: '#555555',
   },
-  info: {
-    color: '#D1D5DB',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  description: {
-    color: '#9CA3AF',
-    fontSize: 12,
-    marginTop: 6,
-    lineHeight: 16,
-  },
-  exclusiveBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: '#E50914',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  exclusiveText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  watchlistButton: {
+  premiumBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 4,
+    backgroundColor: '#6A5ACD',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  premiumText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  // Horizontal variant styles
+  horizontalContainer: {
+    flexDirection: 'row',
+    margin: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  horizontalImage: {
+    width: 100,
+    height: '100%',
+  },
+  horizontalInfo: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  horizontalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#222222',
+  },
+  horizontalDescription: {
+    fontSize: 12,
+    color: '#555555',
+    marginBottom: 8,
+  },
+  horizontalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  year: {
+    fontSize: 12,
+    color: '#555555',
+    marginLeft: 12,
+  },
+  smallPremiumBadge: {
+    backgroundColor: '#6A5ACD',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 12,
+  },
+  smallPremiumText: {
+    color: 'white',
+    fontSize: 8,
+    fontWeight: 'bold',
+  },
+  // Featured variant styles
+  featuredContainer: {
+    margin: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  featuredBackground: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredGradient: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  featuredContent: {
+    padding: 16,
+  },
+  featuredTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  featuredMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  featuredRating: {
+    fontSize: 14,
+    marginLeft: 4,
+    color: 'white',
+    fontWeight: '600',
+  },
+  featuredYear: {
+    fontSize: 14,
+    color: 'white',
+    marginLeft: 16,
+    fontWeight: '500',
+  },
+  featuredDescription: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
 });
 

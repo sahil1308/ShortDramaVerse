@@ -1,152 +1,102 @@
 import { 
   QueryClient, 
-  QueryKey,
-  useMutation, 
+  QueryClientProvider as TanstackQueryClientProvider,
+  QueryOptions,
+  UseQueryOptions,
+  useMutation,
   UseMutationOptions,
-  type MutationFunction
 } from '@tanstack/react-query';
-import axios, { AxiosError, Method } from 'axios';
-import { api } from '@/services/api';
+import { Platform, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { ApiError } from '@/types/drama';
+import React from 'react';
 
-// Define query keys to avoid string duplications
-export const queryKeys = {
-  auth: {
-    user: 'auth-user',
-    profile: 'auth-profile',
-  },
-  series: {
-    list: 'series-list',
-    byId: (id: number) => `series-${id}`,
-    popular: 'series-popular',
-    trending: 'series-trending',
-    byGenre: (genre: string) => `series-genre-${genre}`,
-    search: (query: string) => `series-search-${query}`,
-  },
-  episodes: {
-    bySeriesId: (seriesId: number) => `episodes-series-${seriesId}`,
-    byId: (id: number) => `episode-${id}`,
-    watchHistory: (episodeId: number) => `episode-${episodeId}-history`,
-  },
-  watchlist: {
-    user: 'user-watchlist',
-    check: (seriesId: number) => `watchlist-check-${seriesId}`,
-  },
-  watchHistory: {
-    recent: 'watch-history-recent',
-    all: 'watch-history-all',
-  },
-  ratings: {
-    bySeriesId: (seriesId: number) => `ratings-series-${seriesId}`,
-    userRating: (seriesId: number) => `rating-user-series-${seriesId}`,
-  },
-  transactions: {
-    recent: 'transactions-recent',
-    all: 'transactions-all',
-  },
-  user: {
-    profile: 'user-profile',
-    stats: 'user-stats',
-  },
-};
-
-// Create shared Query Client instance
+// Create a client with default configurations
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 10, // 10 minutes
       retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 30 * 60 * 1000,   // 30 minutes
       refetchOnWindowFocus: false,
       refetchOnMount: true,
     },
   },
 });
 
-/**
- * Make API request with proper error handling
- * @param method HTTP method (GET, POST, PUT, PATCH, DELETE)
- * @param url API endpoint URL
- * @param data Request body data (for POST, PUT, PATCH)
- * @returns Promise resolving to API response
- */
-export const apiRequest = async <T = any>(
-  method: Method,
+// Utility to make API requests
+interface ApiRequestConfig {
+  headers?: Record<string, string>;
+  params?: Record<string, any>;
+}
+
+// Generic API request function that works with the API service
+export async function apiRequest<T>(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
-  data?: any
-): Promise<T> => {
+  data?: any,
+  config?: ApiRequestConfig
+): Promise<T> {
   try {
-    const response = await api.request<T>({
+    const response = await axios({
       method,
       url,
       data,
+      ...config,
     });
-    return response;
+    
+    return response.data as T;
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-      throw new Error(
-        axiosError.response?.data?.message || 
-        axiosError.message || 
-        'An error occurred during the request'
-      );
+    if (axios.isAxiosError(error) && error.response) {
+      // Format error message
+      const status = error.response.status;
+      const message = error.response.data?.message || error.message;
+      
+      const apiError: ApiError = {
+        message,
+        status,
+        errors: error.response.data?.errors,
+      };
+      
+      // For auth errors, may need to handle token refresh or logout
+      if (status === 401) {
+        // Clear stored token
+        try {
+          await AsyncStorage.removeItem('auth_token');
+        } catch (storageError) {
+          console.error('Failed to clear token:', storageError);
+        }
+      }
+      
+      // Show error on mobile devices
+      if (Platform.OS !== 'web') {
+        Alert.alert(
+          'Error',
+          message,
+          [{ text: 'OK' }]
+        );
+      }
+      
+      throw apiError;
     }
-    throw error;
+    
+    // Handle non-axios errors
+    const genericError = error as Error;
+    throw {
+      message: genericError.message || 'An unexpected error occurred',
+      status: 500,
+    };
   }
-};
-
-/**
- * Custom hook for mutations with standard error handling and feedback
- * @param mutationFn Function that performs the mutation
- * @param options Additional options for the mutation
- * @returns Mutation result and functions
- */
-export function useApiMutation<TData = unknown, TError = Error, TVariables = void, TContext = unknown>(
-  mutationFn: MutationFunction<TData, TVariables>,
-  options?: UseMutationOptions<TData, TError, TVariables, TContext>
-) {
-  return useMutation({
-    mutationFn,
-    ...options,
-  });
 }
 
-// Prefetching helper functions
-export const prefetchSeriesDetails = async (id: number) => {
-  await queryClient.prefetchQuery({ 
-    queryKey: [queryKeys.series.byId(id)], 
-    queryFn: () => apiRequest('GET', `/api/series/${id}`) 
-  });
+// Query context provider component
+export const QueryClientProvider: React.FC<{
+  children: React.ReactNode;
+}> = ({ children }) => {
+  return (
+    <TanstackQueryClientProvider client={queryClient}>
+      {children}
+    </TanstackQueryClientProvider>
+  );
 };
-
-export const prefetchSeriesList = async () => {
-  await queryClient.prefetchQuery({ 
-    queryKey: [queryKeys.series.list], 
-    queryFn: () => apiRequest('GET', '/api/series') 
-  });
-};
-
-export const prefetchEpisodes = async (seriesId: number) => {
-  await queryClient.prefetchQuery({ 
-    queryKey: [queryKeys.episodes.bySeriesId(seriesId)], 
-    queryFn: () => apiRequest('GET', `/api/series/${seriesId}/episodes`) 
-  });
-};
-
-// Cache invalidation helpers
-export const invalidateSeriesQueries = async () => {
-  await queryClient.invalidateQueries({ queryKey: [queryKeys.series.list] });
-};
-
-export const invalidateEpisodeQueries = async (seriesId: number) => {
-  await queryClient.invalidateQueries({ queryKey: [queryKeys.episodes.bySeriesId(seriesId)] });
-};
-
-export const invalidateWatchlistQueries = async () => {
-  await queryClient.invalidateQueries({ queryKey: [queryKeys.watchlist.user] });
-};
-
-export const invalidateUserQueries = async () => {
-  await queryClient.invalidateQueries({ queryKey: [queryKeys.user.profile] });
-};
-
-export default queryClient;

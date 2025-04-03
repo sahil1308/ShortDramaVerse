@@ -1,8 +1,37 @@
-import { NavigatorScreenParams } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { ParamListBase } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
-// User Types
+// Error types
+export interface ApiError {
+  message: string;
+  status: number;
+  errors?: Record<string, string[]>;
+}
+
+// Auth types
+export interface AuthCredentials {
+  username: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  username: string;
+  email: string;
+  password: string;
+  displayName?: string;
+}
+
+export interface ProfileUpdateFormData {
+  displayName?: string;
+  email?: string;
+  bio?: string;
+  currentPassword?: string;
+  newPassword?: string;
+  profilePicture?: string;
+}
+
+// User types
 export interface User {
   id: number;
   username: string;
@@ -10,23 +39,12 @@ export interface User {
   displayName: string | null;
   profilePicture: string | null;
   bio: string | null;
-  createdAt: Date;
+  createdAt: string;
   isAdmin: boolean;
   coinBalance: number;
 }
 
-// Authentication Types
-export interface AuthCredentials {
-  username: string;
-  password: string;
-}
-
-export interface RegisterCredentials extends AuthCredentials {
-  email: string;
-  displayName?: string;
-}
-
-// Content Types
+// Drama Series types
 export interface DramaSeries {
   id: number;
   title: string;
@@ -34,122 +52,129 @@ export interface DramaSeries {
   coverImage: string;
   bannerImage: string | null;
   releaseYear: number;
+  genre: string[];
   director: string;
   actors: string[];
-  genre: string[];
-  averageRating: number | null;
+  averageRating: number;
+  isPremium: boolean;
   episodeCount: number;
-  isComplete: boolean;
-  isExclusive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  totalDuration: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
+// Episode types
 export interface Episode {
   id: number;
   seriesId: number;
   title: string;
   description: string;
+  episodeNumber: number;
   thumbnailImage: string;
   videoUrl: string;
-  duration: number | null;
-  episodeNumber: number;
-  season: number;
-  isExclusive: boolean;
-  releaseDate: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  duration: number;
+  isPremium: boolean;
+  createdAt: string;
+  updatedAt: string;
+  series?: DramaSeries;
 }
 
-// User Interaction Types
-export interface Rating {
-  id: number;
-  userId: number;
-  seriesId: number;
-  rating: number;
-  comment: string | null;
-  createdAt: Date;
-  user?: {
-    id: number;
-    username: string;
-    profilePicture: string | null;
-  };
-}
-
+// Watchlist types
 export interface Watchlist {
   id: number;
   userId: number;
   seriesId: number;
-  addedAt: Date;
+  createdAt: string;
   series?: DramaSeries;
 }
 
+// Watch History types
 export interface WatchHistory {
   id: number;
   userId: number;
   episodeId: number;
-  watchedAt: Date;
+  watchedAt: string;
   progress: number;
   completed: boolean;
-  episode?: Episode & {
-    series?: DramaSeries;
-  };
+  episode?: Episode;
 }
 
-// Transaction Types
+// Rating types
+export interface Rating {
+  id: number;
+  userId: number;
+  seriesId: number;
+  value: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: Pick<User, 'id' | 'username' | 'profilePicture'>;
+}
+
+// Transaction types
 export interface Transaction {
   id: number;
   userId: number;
   amount: number;
   description: string;
-  transactionType: 'purchase' | 'credit';
-  status: 'completed' | 'pending' | 'failed';
-  createdAt: Date;
-  meta: {
-    episodeId?: number;
-    seriesId?: number;
-    packageId?: number;
-  } | null;
+  transactionType: 'purchase' | 'spend' | 'refund';
+  status: 'pending' | 'completed' | 'failed';
+  createdAt: string;
+  reference?: string;
 }
 
-// Advertisement Types
+// Advertisement types
 export interface Advertisement {
   id: number;
   title: string;
   description: string;
   imageUrl: string;
   targetUrl: string;
-  placement: 'banner' | 'sidebar' | 'interstitial';
-  active: boolean;
-  startDate: Date;
-  endDate: Date | null;
+  placement: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
   impressions: number;
   clicks: number;
-  createdAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// Navigation Types
+// Navigation types
 export type RootStackParamList = {
-  Loading: { message?: string };
-  AuthStack: NavigatorScreenParams<AuthStackParamList>;
-  MainTabs: NavigatorScreenParams<MainTabsParamList>;
+  AuthStack: undefined;
+  MainTabs: undefined;
   SeriesDetails: { id: number };
   EpisodePlayer: { id: number };
   UserProfile: { id: number };
+  LoadingScreen: { message?: string };
+  SignIn: undefined;
+  SignUp: undefined;
 };
 
 export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
-  ForgotPassword: undefined;
 };
 
 export type MainTabsParamList = {
   Home: undefined;
-  Search: { initialQuery?: string };
+  Search: undefined;
   Watchlist: undefined;
   Profile: undefined;
 };
 
-export type RootStackNavigationProp = NativeStackNavigationProp<RootStackParamList>;
-export type MainTabsNavigationProp = BottomTabNavigationProp<MainTabsParamList>;
+export type RootStackScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<
+  RootStackParamList,
+  T
+>;
+
+export type MainTabScreenProps<T extends keyof MainTabsParamList> = BottomTabScreenProps<
+  MainTabsParamList,
+  T
+>;
+
+// Declare the navigation prop types for easier access
+export type HomeScreenNavigationProp = RootStackScreenProps<'MainTabs'>['navigation'];
+export type SeriesDetailsNavigationProp = RootStackScreenProps<'SeriesDetails'>['navigation'];
+export type EpisodePlayerNavigationProp = RootStackScreenProps<'EpisodePlayer'>['navigation'];
