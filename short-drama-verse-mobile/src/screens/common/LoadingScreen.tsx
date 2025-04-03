@@ -1,51 +1,53 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
-import { useRoute } from '@react-navigation/native';
-import { RootStackParamList } from '@/types/drama';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '@/types/drama';
 
-// Get screen dimensions
-const { width, height } = Dimensions.get('window');
+interface LoadingScreenProps {
+  message?: string;
+  fullScreen?: boolean;
+}
 
-// Colors constants
-const colors = {
-  primary: '#E50914',
-  background: '#121212',
-  text: '#FFFFFF',
-  textSecondary: '#AAAAAA',
-};
-
-// Default loading messages
-const DEFAULT_LOADING_MESSAGE = 'Loading...';
-
-type LoadingScreenProps = NativeStackScreenProps<RootStackParamList, 'LoadingScreen'>;
-
-export default function LoadingScreen({ route }: LoadingScreenProps) {
-  // Get message from route params or use default
-  const message = route?.params?.message || DEFAULT_LOADING_MESSAGE;
-  
+/**
+ * A reusable loading screen component that displays an activity indicator
+ * and an optional message. Can be used as a full screen or as part of another view.
+ */
+const LoadingScreen: React.FC<LoadingScreenProps> = ({ 
+  message = 'Loading...', 
+  fullScreen = true 
+}) => {
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
+    <View style={[
+      styles.container, 
+      fullScreen ? styles.fullScreen : styles.partialScreen
+    ]}>
+      <ActivityIndicator size="large" color="#FF6B6B" />
       <Text style={styles.message}>{message}</Text>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
-  spinner: {
-    marginBottom: 20,
+  fullScreen: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  partialScreen: {
+    height: 200,
   },
   message: {
-    color: colors.text,
+    marginTop: 15,
     fontSize: 16,
+    color: '#555',
     textAlign: 'center',
   },
 });
+
+export default LoadingScreen;

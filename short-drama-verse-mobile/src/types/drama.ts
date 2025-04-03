@@ -1,44 +1,23 @@
-// Navigation Types
-export type RootStackParamList = {
-  // Auth
-  SignIn: undefined;
-  SignUp: undefined;
-  
-  // Main
-  MainTabs: undefined;
-  
-  // Content
-  SeriesDetails: { seriesId: number };
-  EpisodePlayer: { episodeId: number, seriesId: number };
-  
-  // User
-  UserProfile: undefined;
-  
-  // Utility
-  LoadingScreen: { message?: string };
-};
+// Types for drama series data
 
-export type TabParamList = {
-  Home: undefined;
-  Search: undefined;
-  Watchlist: undefined;
-  Profile: undefined;
-};
-
-// API Response Types
 export interface DramaSeries {
   id: number;
   title: string;
   description: string;
-  genre: string[];
   coverImage: string;
-  releaseDate: string;
-  isPremium: boolean;
-  director?: string;
-  cast?: string[];
-  averageRating: number;
+  genres: string[];
+  releaseYear: number;
+  country: string;
+  language: string;
+  director: string;
+  cast: string[];
+  totalEpisodes: number;
+  averageRating: number | null;
+  totalRatings: number;
+  isFeatured: boolean;
+  viewCount: number;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
 }
 
 export interface Episode {
@@ -46,67 +25,71 @@ export interface Episode {
   seriesId: number;
   title: string;
   description: string;
-  episodeNumber: number;
-  duration: number;
+  thumbnailImage: string;
   videoUrl: string;
-  thumbnail?: string;
-  isPremium: boolean;
-  viewCount: number;
+  duration: number; // Duration in seconds
+  episodeNumber: number;
   releaseDate: string;
+  viewCount: number;
+  isFree: boolean;
+  premiumPrice?: number; // Price in coins for premium episodes
   createdAt: string;
-  updatedAt?: string;
-}
-
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  displayName: string | null;
-  profilePicture: string | null;
-  bio: string | null;
-  createdAt: string | null;
-  isAdmin: boolean | null;
-  coinBalance: number | null;
-}
-
-export interface Watchlist {
-  id: number;
-  userId: number;
-  seriesId: number;
-  addedAt: string;
-  series?: DramaSeries;
-}
-
-export interface WatchHistory {
-  id: number;
-  userId: number;
-  episodeId: number;
-  progress: number;
-  completed: boolean;
-  watchedAt: string;
   updatedAt: string;
-  episode?: Episode & { series?: DramaSeries };
 }
 
 export interface Rating {
   id: number;
   userId: number;
   seriesId: number;
-  rating: number;
-  comment?: string;
+  rating: number; // Rating from 1-5
+  comment: string | null;
   createdAt: string;
-  updatedAt?: string;
-  user?: Pick<User, 'id' | 'username' | 'profilePicture'>;
+  updatedAt: string;
+  user?: {
+    id: number;
+    username: string;
+    displayName: string | null;
+    profilePicture: string | null;
+  };
+}
+
+export interface Watchlist {
+  id: number;
+  userId: number;
+  seriesId: number;
+  createdAt: string;
+  series?: DramaSeries;
+}
+
+export interface WatchlistWithSeries extends Watchlist {
+  series: DramaSeries;
+}
+
+export interface WatchHistory {
+  id: number;
+  userId: number;
+  episodeId: number;
+  seriesId: number;
+  watchedAt: string;
+  progress: number; // Progress in seconds
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  episode?: Episode;
+  series?: DramaSeries;
 }
 
 export interface Transaction {
   id: number;
   userId: number;
   amount: number;
-  type: 'purchase' | 'subscription' | 'refund';
+  type: 'purchase' | 'refund' | 'reward';
+  description: string;
   status: 'pending' | 'completed' | 'failed';
-  details?: string;
-  transactionDate: string;
+  referenceId?: string; // For external payment references
+  createdAt: string;
+  episodeId?: number;
+  seriesId?: number;
 }
 
 export interface Advertisement {
@@ -114,35 +97,114 @@ export interface Advertisement {
   title: string;
   description: string;
   imageUrl: string;
-  linkUrl: string;
-  placement: string;
+  targetUrl: string; 
+  placement: 'home_banner' | 'series_detail' | 'episode_player' | 'search';
   startDate: string;
   endDate: string;
-  isActive: boolean;
   impressions: number;
   clicks: number;
+  isActive: boolean;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
 }
 
-// Auth types
-export interface AuthState {
-  user: User | null;
-  token: string | null;
-  loading: boolean;
-  error: string | null;
+export interface SearchResult {
+  series: DramaSeries[];
+  totalCount: number;
 }
 
-// API Response types
+export interface HomeContent {
+  featured: DramaSeries[];
+  trending: DramaSeries[];
+  newest: DramaSeries[];
+  continueWatching?: (WatchHistory & { 
+    episode: Episode; 
+    series: DramaSeries;
+  })[];
+  advertisements: Advertisement[];
+}
+
+export interface SeriesDetailsWithRelated {
+  series: DramaSeries;
+  episodes: Episode[];
+  ratings: Rating[];
+  isInWatchlist: boolean;
+  related: DramaSeries[];
+}
+
+export interface UserProfile {
+  totalWatched: number;
+  watchTimeMinutes: number;
+  favoriteGenres: { genre: string; count: number }[];
+  recentActivity: WatchHistory[];
+}
+
 export interface ApiResponse<T> {
   data: T;
   message?: string;
-  error?: string;
+  success: boolean;
 }
 
-// Error response
-export interface ApiError {
-  message: string;
-  status: number;
-  details?: any;
+export interface PaginatedResponse<T> {
+  data: T[];
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+// Request and response types
+export interface RatingRequest {
+  seriesId: number;
+  rating: number;
+  comment?: string;
+}
+
+export interface WatchHistoryRequest {
+  episodeId: number;
+  seriesId: number;
+  progress: number;
+  isCompleted: boolean;
+}
+
+export interface PurchaseRequest {
+  episodeId: number;
+  seriesId: number;
+}
+
+export interface CoinPurchaseRequest {
+  amount: number;
+  paymentMethod: 'credit_card' | 'paypal' | 'apple_pay' | 'google_pay';
+}
+
+// Extended types with additional client-side properties
+export interface EpisodeWithPurchaseStatus extends Episode {
+  isPremium: boolean;
+  purchased: boolean;
+  coinPrice: number;
+}
+
+export interface WatchHistoryWithProgress extends WatchHistory {
+  progressSeconds: number;
+  progressPercentage: number;
+}
+
+// Navigation types
+export interface RootStackParamList {
+  Home: undefined;
+  SeriesDetails: { seriesId: number };
+  EpisodePlayer: { episodeId: number, seriesId: number };
+  SignIn: undefined; 
+  SignUp: undefined;
+  UserProfile: undefined;
+  Search: undefined;
+  Watchlist: undefined;
+  Settings: undefined;
+}
+
+export interface TabParamList {
+  Home: undefined;
+  Search: undefined;
+  Watchlist: undefined;
+  Profile: undefined;
 }

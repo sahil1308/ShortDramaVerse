@@ -1,17 +1,27 @@
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import {
-  useQuery,
-  useMutation,
-  UseMutationResult,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { User } from '@/types/drama';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as api from '@/services/api';
+import * as storage from '@/services/storage';
 import { apiRequest } from '@/lib/queryClient';
-import { endpoints } from '@/services/api';
-import { setToken, removeToken, setUserData, removeUserData, getUserData } from '@/services/storage';
 import { Alert } from 'react-native';
 
-// Auth Types
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string | null;
+  profilePicture: string | null;
+  bio: string | null;
+  createdAt: string;
+  isAdmin: boolean;
+  coinBalance: number;
+}
+
+interface AuthResponse {
+  user: User;
+  token: string;
+}
+
 interface LoginCredentials {
   username: string;
   password: string;
@@ -21,177 +31,233 @@ interface RegisterCredentials {
   username: string;
   email: string;
   password: string;
+  displayName?: string;
 }
 
 interface UpdateProfileData {
   displayName?: string;
   bio?: string;
-  profilePicture?: string;
+  email?: string;
+  currentPassword?: string;
+  newPassword?: string;
 }
 
-interface AuthResponse {
-  user: User;
-  token: string;
+// Custom hook for login mutation
+function useLoginMutation() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (credentials: LoginCredentials) => {
+      try {
+        const response: AuthResponse = await api.apiRequest('POST', api.endpoints.auth.login, credentials);
+        
+        // Save token and user data
+        await storage.setToken(response.token);
+        await storage.setUserData(response.user);
+        
+        return response.user;
+      } catch (error) {
+        console.error('Login error:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+    },
+    onError: (error: Error) => {
+      // Handle login error
+      console.error('Login mutation error:', error);
+      Alert.alert('Login Failed', error.message || 'Failed to log in. Please try again.');
+    },
+  });
 }
 
-// Auth Context Type
+// Custom hook for registration mutation
+function useRegisterMutation() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (credentials: RegisterCredentials) => {
+      try {
+        const response: AuthResponse = await api.apiRequest('POST', api.endpoints.auth.register, credentials);
+        
+        // Save token and user data
+        await storage.setToken(response.token);
+        await storage.setUserData(response.user);
+        
+        return response.user;
+      } catch (error) {
+        console.error('Registration error:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+    },
+    onError: (error: Error) => {
+      // Handle registration error
+      console.error('Registration mutation error:', error);
+      Alert.alert('Registration Failed', error.message || 'Failed to register. Please try again.');
+    },
+  });
+}
+
+// Custom hook for logout mutation
+function useLogoutMutation() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async () => {
+      try {
+        await api.apiRequest('POST', api.endpoints.auth.logout);
+        
+        // Clear local storage
+        await storage.removeToken();
+        await storage.removeUserData();
+      } catch (error) {
+        console.error('Logout error:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      // Reset auth state and invalidate queries
+      queryClient.setQueryData(['/api/user'], null);
+      queryClient.invalidateQueries();
+    },
+    onError: (error: Error) => {
+      // Handle logout error
+      console.error('Logout mutation error:', error);
+      Alert.alert('Logout Failed', error.message || 'Failed to log out. Please try again.');
+    },
+  });
+}
+
+// Custom hook for profile update mutation
+function useUpdateProfileMutation() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: UpdateProfileData) => {
+      try {
+        const response: User = await api.apiRequest('PATCH', api.endpoints.profile.update, data);
+        
+        // Update stored user data
+        await storage.setUserData(response);
+        
+        return response;
+      } catch (error) {
+        console.error('Profile update error:', error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      // Invalidate user data
+      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+    },
+    onError: (error: Error) => {
+      // Handle profile update error
+      console.error('Profile update mutation error:', error);
+      Alert.alert('Update Failed', error.message || 'Failed to update profile. Please try again.');
+    },
+  });
+}
+
+// Context type definition
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: UseMutationResult<AuthResponse, Error, LoginCredentials>;
-  registerMutation: UseMutationResult<AuthResponse, Error, RegisterCredentials>;
-  logoutMutation: UseMutationResult<void, Error, void>;
-  updateProfileMutation: UseMutationResult<User, Error, UpdateProfileData>;
+  loginMutation: ReturnType<typeof useLoginMutation>;
+  registerMutation: ReturnType<typeof useRegisterMutation>;
+  logoutMutation: ReturnType<typeof useLogoutMutation>;
+  updateProfileMutation: ReturnType<typeof useUpdateProfileMutation>;
 }
 
-// Create Auth Context
-const AuthContext = createContext<AuthContextType | null>(null);
+// Create auth context
+export const AuthContext = createContext<AuthContextType | null>(null);
 
-// Auth Provider Component
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient();
+// Auth provider component
+export const AuthProvider = ({ children }) => {
   const [initialLoading, setInitialLoading] = useState(true);
+  const queryClient = useQueryClient();
   
-  // Check if the user is already logged in
-  const {
+  // Query hook for user data
+  const { 
     data: user,
-    isLoading: isUserLoading,
-    error: userError,
-    refetch: refetchUser,
+    isLoading: isLoadingUser,
+    error
   } = useQuery({
-    queryKey: ['user'],
+    queryKey: ['/api/user'],
     queryFn: async () => {
       try {
-        const userData = await apiRequest<User>('GET', endpoints.auth.user);
-        return userData;
+        return await apiRequest('GET', api.endpoints.auth.user);
       } catch (error) {
-        // Clear any stored tokens on authentication error
-        await removeToken();
-        await removeUserData();
-        return null;
+        if (error instanceof api.ApiError && error.status === 401) {
+          return null;
+        }
+        throw error;
       }
     },
-    enabled: !initialLoading, // Disable initial fetch until we check AsyncStorage
+    // Don't fetch until we've checked for stored credentials
+    enabled: !initialLoading
   });
   
-  // Check for stored user data on app start
+  // Mutations
+  const loginMutation = useLoginMutation();
+  const registerMutation = useRegisterMutation();
+  const logoutMutation = useLogoutMutation();
+  const updateProfileMutation = useUpdateProfileMutation();
+  
+  // On mount, check if we have stored credentials
   useEffect(() => {
-    async function checkStoredUser() {
+    async function restoreUser() {
       try {
-        const userData = await getUserData();
-        if (userData) {
-          queryClient.setQueryData(['user'], userData);
+        const storedToken = await storage.getToken();
+        const storedUser = await storage.getUserData();
+        
+        if (storedToken && storedUser) {
+          // If we have stored credentials, set them in the query client cache
+          queryClient.setQueryData(['/api/user'], storedUser);
         }
       } catch (error) {
-        console.error('Error loading stored user:', error);
+        console.error('Failed to restore user session:', error);
       } finally {
         setInitialLoading(false);
       }
     }
     
-    checkStoredUser();
+    restoreUser();
   }, [queryClient]);
   
-  // Login Mutation
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginCredentials) => {
-      const response = await apiRequest<AuthResponse>('POST', endpoints.auth.login, credentials, {
-        authRequired: false,
-      });
-      
-      // Store token and user data
-      await setToken(response.token);
-      await setUserData(response.user);
-      
-      return response;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['user'], data.user);
-    },
-    onError: (error) => {
-      console.error('Login error:', error);
-      Alert.alert('Login Failed', (error as Error).message || 'Could not login. Please try again.');
-    },
-  });
-  
-  // Register Mutation
-  const registerMutation = useMutation({
-    mutationFn: async (credentials: RegisterCredentials) => {
-      const response = await apiRequest<AuthResponse>('POST', endpoints.auth.register, credentials, {
-        authRequired: false,
-      });
-      
-      // Store token and user data
-      await setToken(response.token);
-      await setUserData(response.user);
-      
-      return response;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['user'], data.user);
-    },
-    onError: (error) => {
-      console.error('Registration error:', error);
-      Alert.alert('Registration Failed', (error as Error).message || 'Could not create account. Please try again.');
-    },
-  });
-  
-  // Logout Mutation
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest<void>('POST', endpoints.auth.logout);
-      await removeToken();
-      await removeUserData();
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(['user'], null);
-      queryClient.invalidateQueries();
-    },
-    onError: (error) => {
-      console.error('Logout error:', error);
-      Alert.alert('Logout Failed', (error as Error).message || 'Could not logout. Please try again.');
-    },
-  });
-  
-  // Update Profile Mutation
-  const updateProfileMutation = useMutation({
-    mutationFn: async (profileData: UpdateProfileData) => {
-      return apiRequest<User>('PUT', endpoints.auth.user, profileData);
-    },
-    onSuccess: (updatedUser) => {
-      queryClient.setQueryData(['user'], updatedUser);
-      setUserData(updatedUser);
-      Alert.alert('Success', 'Your profile has been updated successfully.');
-    },
-    onError: (error) => {
-      console.error('Profile update error:', error);
-      Alert.alert('Update Failed', (error as Error).message || 'Could not update profile. Please try again.');
-    },
-  });
+  // Combined loading state
+  const isLoading = initialLoading || isLoadingUser;
   
   return (
     <AuthContext.Provider
       value={{
         user: user || null,
-        isLoading: initialLoading || isUserLoading,
-        error: userError as Error,
+        isLoading,
+        error,
         loginMutation,
         registerMutation,
         logoutMutation,
-        updateProfileMutation,
+        updateProfileMutation
       }}
     >
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
 // Hook to use the auth context
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
+  
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+  
   return context;
-}
+};
