@@ -3,493 +3,707 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertDramaSeriesSchema, insertEpisodeSchema, insertChannelSchema, insertWatchlistSchema, insertWatchHistorySchema, insertSubscriptionSchema, insertCoinTransactionSchema } from "@shared/schema";
+import { 
+  insertDramaSeriesSchema,
+  insertEpisodeSchema,
+  insertRatingSchema,
+  insertWatchlistSchema,
+  insertWatchHistorySchema,
+  insertTransactionSchema,
+  insertAdvertisementSchema
+} from "@shared/schema";
 
-// Helper middleware to check if user is authenticated
-const isAuthenticated = (req: any, res: any, next: any) => {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.status(401).send("Unauthorized");
-};
-
-// Helper middleware to check if user is admin
-const isAdmin = (req: any, res: any, next: any) => {
-  if (req.isAuthenticated() && req.user.isAdmin) {
-    return next();
-  }
-  res.status(403).send("Forbidden");
-};
-
-export async function registerRoutes(app: Express): Promise<Server> {
+export function registerRoutes(app: Express): Server {
   // Set up authentication routes
   setupAuth(app);
-
-  // Drama Series routes
-  app.get("/api/dramas", async (req, res) => {
-    try {
-      const dramas = await storage.getAllDramaSeries();
-      res.json(dramas);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch dramas" });
+  
+  // Middleware to check authentication
+  const requireAuth = (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Authentication required" });
     }
-  });
-
-  app.get("/api/dramas/featured", async (req, res) => {
-    try {
-      const dramas = await storage.getFeaturedDramaSeries();
-      res.json(dramas);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch featured dramas" });
+    next();
+  };
+  
+  // Middleware to check admin role
+  const requireAdmin = (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated() || !req.user.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
     }
-  });
-
-  app.get("/api/dramas/trending", async (req, res) => {
+    next();
+  };
+  
+  /*
+   * Drama Series Routes
+   */
+  
+  // Get all drama series
+  app.get("/api/drama-series", async (req, res, next) => {
     try {
-      const dramas = await storage.getTrendingDramaSeries();
-      res.json(dramas);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch trending dramas" });
-    }
-  });
-
-  app.get("/api/dramas/premium", async (req, res) => {
-    try {
-      const dramas = await storage.getPremiumDramaSeries();
-      res.json(dramas);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch premium dramas" });
-    }
-  });
-
-  app.get("/api/dramas/genre/:genre", async (req, res) => {
-    try {
-      const { genre } = req.params;
-      const dramas = await storage.getDramaSeriesByGenre(genre);
-      res.json(dramas);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch dramas by genre" });
-    }
-  });
-
-  app.get("/api/dramas/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const drama = await storage.getDramaSeries(parseInt(id));
-      if (!drama) {
-        return res.status(404).json({ error: "Drama not found" });
+      // Handle optional genre query parameter
+      const genre = req.query.genre as string | undefined;
+      
+      if (genre) {
+        const series = await storage.getDramaSeriesByGenre(genre);
+        res.json(series);
+      } else {
+        const series = await storage.getAllDramaSeries();
+        res.json(series);
       }
-      res.json(drama);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch drama" });
+      next(error);
     }
   });
-
-  app.post("/api/dramas", isAdmin, async (req, res) => {
+  
+  // Search drama series
+  app.get("/api/drama-series/search", async (req, res, next) => {
+    try {
+      const query = req.query.q as string;
+      if (!query) {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+      
+      const results = await storage.searchDramaSeries(query);
+      res.json(results);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Get drama series by ID
+  app.get("/api/drama-series/:id", async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      const series = await storage.getDramaSeries(id);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
+      res.json(series);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Create drama series (admin only)
+  app.post("/api/drama-series", requireAdmin, async (req, res, next) => {
     try {
       const validatedData = insertDramaSeriesSchema.parse(req.body);
-      const drama = await storage.createDramaSeries(validatedData);
-      res.status(201).json(drama);
+      const series = await storage.createDramaSeries(validatedData);
+      res.status(201).json(series);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
-      res.status(500).json({ error: "Failed to create drama" });
+      next(error);
     }
   });
-
-  app.put("/api/dramas/:id", isAdmin, async (req, res) => {
+  
+  // Update drama series (admin only)
+  app.patch("/api/drama-series/:id", requireAdmin, async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const validatedData = insertDramaSeriesSchema.partial().parse(req.body);
-      const drama = await storage.updateDramaSeries(parseInt(id), validatedData);
-      if (!drama) {
-        return res.status(404).json({ error: "Drama not found" });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
       }
-      res.json(drama);
+      
+      const series = await storage.getDramaSeries(id);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
+      const updatedSeries = await storage.updateDramaSeries(id, req.body);
+      res.json(updatedSeries);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to update drama" });
+      next(error);
     }
   });
-
-  app.delete("/api/dramas/:id", isAdmin, async (req, res) => {
+  
+  // Delete drama series (admin only)
+  app.delete("/api/drama-series/:id", requireAdmin, async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const deleted = await storage.deleteDramaSeries(parseInt(id));
-      if (!deleted) {
-        return res.status(404).json({ error: "Drama not found" });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
       }
-      res.status(204).send();
+      
+      const series = await storage.getDramaSeries(id);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
+      await storage.deleteDramaSeries(id);
+      res.status(204).end();
     } catch (error) {
-      res.status(500).json({ error: "Failed to delete drama" });
+      next(error);
     }
   });
-
-  // Episode routes
-  app.get("/api/dramas/:seriesId/episodes", async (req, res) => {
+  
+  /*
+   * Episode Routes
+   */
+  
+  // Get episodes by series ID
+  app.get("/api/drama-series/:seriesId/episodes", async (req, res, next) => {
     try {
-      const { seriesId } = req.params;
-      const episodes = await storage.getEpisodesBySeriesId(parseInt(seriesId));
+      const seriesId = parseInt(req.params.seriesId);
+      if (isNaN(seriesId)) {
+        return res.status(400).json({ message: "Invalid series ID" });
+      }
+      
+      const series = await storage.getDramaSeries(seriesId);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
+      const episodes = await storage.getEpisodesBySeriesId(seriesId);
       res.json(episodes);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch episodes" });
+      next(error);
     }
   });
-
-  app.get("/api/episodes/:id", async (req, res) => {
+  
+  // Get episode by ID
+  app.get("/api/episodes/:id", async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const episode = await storage.getEpisode(parseInt(id));
-      if (!episode) {
-        return res.status(404).json({ error: "Episode not found" });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
       }
+      
+      const episode = await storage.getEpisode(id);
+      if (!episode) {
+        return res.status(404).json({ message: "Episode not found" });
+      }
+      
       res.json(episode);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch episode" });
+      next(error);
     }
   });
-
-  app.post("/api/episodes", isAdmin, async (req, res) => {
+  
+  // Create episode (admin only)
+  app.post("/api/episodes", requireAdmin, async (req, res, next) => {
     try {
       const validatedData = insertEpisodeSchema.parse(req.body);
+      
+      // Verify series exists
+      const series = await storage.getDramaSeries(validatedData.seriesId);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
       const episode = await storage.createEpisode(validatedData);
       res.status(201).json(episode);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
-      res.status(500).json({ error: "Failed to create episode" });
+      next(error);
     }
   });
-
-  app.put("/api/episodes/:id", isAdmin, async (req, res) => {
+  
+  // Update episode (admin only)
+  app.patch("/api/episodes/:id", requireAdmin, async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const validatedData = insertEpisodeSchema.partial().parse(req.body);
-      const episode = await storage.updateEpisode(parseInt(id), validatedData);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      const episode = await storage.getEpisode(id);
       if (!episode) {
-        return res.status(404).json({ error: "Episode not found" });
+        return res.status(404).json({ message: "Episode not found" });
       }
-      res.json(episode);
+      
+      const updatedEpisode = await storage.updateEpisode(id, req.body);
+      res.json(updatedEpisode);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+      next(error);
+    }
+  });
+  
+  // Delete episode (admin only)
+  app.delete("/api/episodes/:id", requireAdmin, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
       }
-      res.status(500).json({ error: "Failed to update episode" });
-    }
-  });
-
-  app.delete("/api/episodes/:id", isAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const deleted = await storage.deleteEpisode(parseInt(id));
-      if (!deleted) {
-        return res.status(404).json({ error: "Episode not found" });
+      
+      const episode = await storage.getEpisode(id);
+      if (!episode) {
+        return res.status(404).json({ message: "Episode not found" });
       }
-      res.status(204).send();
+      
+      await storage.deleteEpisode(id);
+      res.status(204).end();
     } catch (error) {
-      res.status(500).json({ error: "Failed to delete episode" });
+      next(error);
     }
   });
-
-  // Channel routes
-  app.get("/api/channels", async (req, res) => {
-    try {
-      const channels = await storage.getAllChannels();
-      res.json(channels);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch channels" });
-    }
-  });
-
-  app.get("/api/channels/popular", async (req, res) => {
-    try {
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 5;
-      const channels = await storage.getPopularChannels(limit);
-      res.json(channels);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch popular channels" });
-    }
-  });
-
-  app.get("/api/channels/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const channel = await storage.getChannel(parseInt(id));
-      if (!channel) {
-        return res.status(404).json({ error: "Channel not found" });
-      }
-      res.json(channel);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch channel" });
-    }
-  });
-
-  app.post("/api/channels", isAdmin, async (req, res) => {
-    try {
-      const validatedData = insertChannelSchema.parse(req.body);
-      const channel = await storage.createChannel(validatedData);
-      res.status(201).json(channel);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to create channel" });
-    }
-  });
-
-  // Watchlist routes
-  app.get("/api/watchlist", isAuthenticated, async (req, res) => {
+  
+  /*
+   * Watchlist Routes
+   */
+  
+  // Get user's watchlist
+  app.get("/api/watchlist", requireAuth, async (req, res, next) => {
     try {
       const userId = req.user!.id;
-      const watchlist = await storage.getUserWatchlist(userId);
+      const watchlist = await storage.getWatchlistByUserId(userId);
       res.json(watchlist);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch watchlist" });
+      next(error);
     }
   });
-
-  app.post("/api/watchlist", isAuthenticated, async (req, res) => {
+  
+  // Add series to watchlist
+  app.post("/api/watchlist", requireAuth, async (req, res, next) => {
     try {
       const userId = req.user!.id;
-      const validatedData = insertWatchlistSchema.parse({ ...req.body, userId });
-      const watchlist = await storage.addToWatchlist(validatedData);
-      res.status(201).json(watchlist);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to add to watchlist" });
-    }
-  });
-
-  app.delete("/api/watchlist/:seriesId", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const { seriesId } = req.params;
-      const deleted = await storage.removeFromWatchlist(userId, parseInt(seriesId));
-      if (!deleted) {
-        return res.status(404).json({ error: "Item not found in watchlist" });
-      }
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ error: "Failed to remove from watchlist" });
-    }
-  });
-
-  // Watch history routes
-  app.get("/api/history", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const history = await storage.getUserWatchHistory(userId);
-      res.json(history);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch watch history" });
-    }
-  });
-
-  app.post("/api/history", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const validatedData = insertWatchHistorySchema.parse({ ...req.body, userId });
-      const history = await storage.updateWatchHistory(validatedData);
-      res.status(201).json(history);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to update watch history" });
-    }
-  });
-
-  // Subscription routes
-  app.get("/api/subscriptions", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const subscriptions = await storage.getUserSubscriptions(userId);
-      res.json(subscriptions);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch subscriptions" });
-    }
-  });
-
-  app.post("/api/subscriptions", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const validatedData = insertSubscriptionSchema.parse({ ...req.body, userId });
-      const subscription = await storage.subscribeToChannel(validatedData);
-      res.status(201).json(subscription);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to subscribe to channel" });
-    }
-  });
-
-  app.delete("/api/subscriptions/:channelId", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const { channelId } = req.params;
-      const deleted = await storage.unsubscribeFromChannel(userId, parseInt(channelId));
-      if (!deleted) {
-        return res.status(404).json({ error: "Subscription not found" });
-      }
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ error: "Failed to unsubscribe from channel" });
-    }
-  });
-
-  // Coin transaction routes
-  app.get("/api/coins/transactions", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const transactions = await storage.getUserCoinTransactions(userId);
-      res.json(transactions);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch coin transactions" });
-    }
-  });
-
-  app.post("/api/coins/purchase", isAuthenticated, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const { amount } = req.body;
-      
-      if (!amount || amount <= 0) {
-        return res.status(400).json({ error: "Invalid amount" });
-      }
-      
-      // Create transaction record
-      const validatedData = insertCoinTransactionSchema.parse({
+      const validatedData = insertWatchlistSchema.parse({
+        ...req.body,
         userId,
-        amount,
-        description: `Purchased ${amount} coins`,
-        transactionType: "purchase",
-        status: "completed"
       });
       
-      const transaction = await storage.createCoinTransaction(validatedData);
-      
-      // Update user's coin balance
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
+      // Verify series exists
+      const series = await storage.getDramaSeries(validatedData.seriesId);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
       }
       
-      const updatedUser = await storage.updateUserCoins(userId, user.coins + amount);
-      
-      res.status(201).json({ transaction, user: updatedUser });
+      const watchlistItem = await storage.addToWatchlist(validatedData);
+      res.status(201).json(watchlistItem);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
-      res.status(500).json({ error: "Failed to purchase coins" });
+      next(error);
     }
   });
-
-  app.post("/api/coins/unlock-premium", isAuthenticated, async (req, res) => {
+  
+  // Remove series from watchlist
+  app.delete("/api/watchlist/:seriesId", requireAuth, async (req, res, next) => {
     try {
       const userId = req.user!.id;
-      const { seriesId } = req.body;
+      const seriesId = parseInt(req.params.seriesId);
       
-      // Validate series exists and is premium
-      const series = await storage.getDramaSeries(seriesId);
-      if (!series) {
-        return res.status(404).json({ error: "Series not found" });
+      if (isNaN(seriesId)) {
+        return res.status(400).json({ message: "Invalid series ID" });
       }
       
-      if (!series.isPremium) {
-        return res.status(400).json({ error: "This content is not premium" });
+      // Check if in watchlist
+      const isInWatchlist = await storage.isInWatchlist(userId, seriesId);
+      if (!isInWatchlist) {
+        return res.status(404).json({ message: "Series not found in watchlist" });
+      }
+      
+      await storage.removeFromWatchlist(userId, seriesId);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Check if series is in watchlist
+  app.get("/api/watchlist/check/:seriesId", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const seriesId = parseInt(req.params.seriesId);
+      
+      if (isNaN(seriesId)) {
+        return res.status(400).json({ message: "Invalid series ID" });
+      }
+      
+      const isInWatchlist = await storage.isInWatchlist(userId, seriesId);
+      res.json({ inWatchlist: isInWatchlist });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /*
+   * Watch History Routes
+   */
+  
+  // Get user's watch history
+  app.get("/api/watch-history", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const watchHistory = await storage.getWatchHistoryByUserId(userId);
+      res.json(watchHistory);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Add or update watch history
+  app.post("/api/watch-history", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const validatedData = insertWatchHistorySchema.parse({
+        ...req.body,
+        userId,
+      });
+      
+      // Verify episode exists
+      const episode = await storage.getEpisode(validatedData.episodeId);
+      if (!episode) {
+        return res.status(404).json({ message: "Episode not found" });
+      }
+      
+      // Check if episode is premium and user has paid
+      if (episode.isPremium) {
+        // If user hasn't paid and isn't an admin, deny access
+        // In a real app, we would check transactions or subscriptions here
+        if (!req.user!.isAdmin && req.user!.coinBalance < (episode.price || 0)) {
+          return res.status(403).json({ 
+            message: "Purchase required to view this premium episode",
+            price: episode.price
+          });
+        }
+      }
+      
+      const historyItem = await storage.addToWatchHistory(validatedData);
+      res.status(201).json(historyItem);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+  
+  /*
+   * Rating Routes
+   */
+  
+  // Get ratings for a series
+  app.get("/api/drama-series/:seriesId/ratings", async (req, res, next) => {
+    try {
+      const seriesId = parseInt(req.params.seriesId);
+      if (isNaN(seriesId)) {
+        return res.status(400).json({ message: "Invalid series ID" });
+      }
+      
+      const series = await storage.getDramaSeries(seriesId);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
+      const ratings = await storage.getRatingsBySeriesId(seriesId);
+      res.json(ratings);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Add or update a rating
+  app.post("/api/ratings", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const validatedData = insertRatingSchema.parse({
+        ...req.body,
+        userId,
+      });
+      
+      // Verify series exists
+      const series = await storage.getDramaSeries(validatedData.seriesId);
+      if (!series) {
+        return res.status(404).json({ message: "Drama series not found" });
+      }
+      
+      const rating = await storage.createRating(validatedData);
+      res.status(201).json(rating);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+  
+  // Delete a rating
+  app.delete("/api/ratings/:id", requireAuth, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      // Ensure user owns the rating or is admin
+      const rating = await storage.getRatingByUserAndSeries(req.user!.id, id);
+      if (!rating && !req.user!.isAdmin) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      
+      await storage.deleteRating(id);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /*
+   * Coin System Routes
+   */
+  
+  // Get user's coin balance
+  app.get("/api/coins/balance", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({ balance: user.coinBalance });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Get user's transaction history
+  app.get("/api/coins/transactions", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const transactions = await storage.getUserTransactions(userId);
+      res.json(transactions);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Create a new transaction (eg. purchase coins)
+  app.post("/api/coins/purchase", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const validatedData = insertTransactionSchema.parse({
+        ...req.body,
+        userId,
+        transactionType: 'purchase',
+      });
+      
+      const transaction = await storage.createTransaction(validatedData);
+      
+      // Get updated user
+      const user = await storage.getUser(userId);
+      res.status(201).json({
+        transaction,
+        newBalance: user?.coinBalance
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+  
+  // Purchase premium content
+  app.post("/api/coins/purchase-content/:episodeId", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.id;
+      const episodeId = parseInt(req.params.episodeId);
+      
+      if (isNaN(episodeId)) {
+        return res.status(400).json({ message: "Invalid episode ID" });
+      }
+      
+      // Verify episode exists and is premium
+      const episode = await storage.getEpisode(episodeId);
+      if (!episode) {
+        return res.status(404).json({ message: "Episode not found" });
+      }
+      
+      if (!episode.isPremium) {
+        return res.status(400).json({ message: "Episode is not premium content" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
       }
       
       // Check if user has enough coins
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
+      if (user.coinBalance < (episode.price || 0)) {
+        return res.status(400).json({ 
+          message: "Insufficient coins",
+          required: episode.price,
+          balance: user.coinBalance
+        });
       }
       
-      if (user.coins < series.coinPrice) {
-        return res.status(400).json({ error: "Insufficient coins" });
-      }
-      
-      // Create transaction record
-      const validatedData = insertCoinTransactionSchema.parse({
+      // Create transaction
+      const transaction = await storage.createTransaction({
         userId,
-        amount: -series.coinPrice,
-        description: `Unlocked premium content: ${series.title}`,
-        transactionType: "content_unlock",
-        status: "completed"
+        amount: -(episode.price || 0),
+        description: `Purchase of episode: ${episode.title}`,
+        transactionType: 'content_buy',
+        metadata: { episodeId },
       });
       
-      const transaction = await storage.createCoinTransaction(validatedData);
+      // Get updated user
+      const updatedUser = await storage.getUser(userId);
+      res.status(201).json({
+        transaction,
+        newBalance: updatedUser?.coinBalance
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /*
+   * Advertisement Routes
+   */
+  
+  // Get active advertisements by placement
+  app.get("/api/ads/:placement", async (req, res, next) => {
+    try {
+      const placement = req.params.placement;
+      const ads = await storage.getActiveAdvertisements(placement);
       
-      // Update user's coin balance
-      const updatedUser = await storage.updateUserCoins(userId, user.coins - series.coinPrice);
+      // If this was a real app, we would increment impressions here
+      // for metrics tracking
       
-      res.status(201).json({ transaction, user: updatedUser });
+      res.json(ads);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Record ad click
+  app.post("/api/ads/:id/click", async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      await storage.incrementAdClicks(id);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Record ad impression
+  app.post("/api/ads/:id/impression", async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      await storage.incrementAdImpressions(id);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Create advertisement (admin only)
+  app.post("/api/ads", requireAdmin, async (req, res, next) => {
+    try {
+      const validatedData = insertAdvertisementSchema.parse(req.body);
+      const ad = await storage.createAdvertisement(validatedData);
+      res.status(201).json(ad);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
-      res.status(500).json({ error: "Failed to unlock premium content" });
+      next(error);
     }
   });
-
-  // Analytics routes (admin only)
-  app.get("/api/admin/analytics/users", isAdmin, async (req, res) => {
+  
+  // Update advertisement (admin only)
+  app.patch("/api/ads/:id", requireAdmin, async (req, res, next) => {
     try {
-      // In a real app, this would query for user analytics
-      // For now, return mock data
-      res.json({
-        totalUsers: 100,
-        newUsersToday: 5,
-        premiumUsers: 20,
-        activeUsers: 45
-      });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      const ad = await storage.updateAdvertisement(id, req.body);
+      res.json(ad);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch user analytics" });
+      next(error);
     }
   });
-
-  app.get("/api/admin/analytics/content", isAdmin, async (req, res) => {
+  
+  // Delete advertisement (admin only)
+  app.delete("/api/ads/:id", requireAdmin, async (req, res, next) => {
     try {
-      // In a real app, this would query for content analytics
-      // For now, return mock data
-      res.json({
-        totalDramas: 25,
-        totalEpisodes: 150,
-        totalViews: 5000,
-        popularGenres: ["Romance", "Comedy", "Suspense"]
-      });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      await storage.deleteAdvertisement(id);
+      res.status(204).end();
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch content analytics" });
+      next(error);
     }
   });
-
-  app.get("/api/admin/analytics/revenue", isAdmin, async (req, res) => {
+  
+  /*
+   * User Management Routes (Admin)
+   */
+  
+  // Get all users (admin only)
+  app.get("/api/admin/users", requireAdmin, async (req, res, next) => {
     try {
-      // In a real app, this would query for revenue analytics
-      // For now, return mock data
-      res.json({
-        totalCoinsSpent: 5000,
-        premiumUnlocks: 120,
-        coinPurchases: 200,
-        mostProfitableSeries: [
-          { id: 1, title: "Royal Dynasty", revenue: 800 },
-          { id: 2, title: "Crime Files", revenue: 600 },
-          { id: 3, title: "Luxury Lives", revenue: 400 }
-        ]
-      });
+      const users = await Promise.all(
+        Array.from({ length: 50 }, (_, i) => i + 1)
+          .map(async (id) => {
+            const user = await storage.getUser(id);
+            return user;
+          })
+      );
+      
+      // Filter out undefined users and remove passwords
+      const filteredUsers = users
+        .filter(Boolean)
+        .map(user => {
+          const { password, ...userWithoutPassword } = user!;
+          return userWithoutPassword;
+        });
+      
+      res.json(filteredUsers);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch revenue analytics" });
+      next(error);
     }
   });
-
+  
+  // Update user (admin only)
+  app.patch("/api/admin/users/:id", requireAdmin, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID" });
+      }
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const updatedUser = await storage.updateUser(id, req.body);
+      
+      // Remove password from response
+      const { password, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   const httpServer = createServer(app);
   return httpServer;
 }

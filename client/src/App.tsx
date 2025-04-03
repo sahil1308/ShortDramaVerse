@@ -1,35 +1,38 @@
 import { Switch, Route } from "wouter";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import NotFound from "@/pages/not-found";
-import AuthPage from "@/pages/auth-page";
-import HomePage from "@/pages/home-page";
-import WatchPage from "@/pages/watch-page";
-import ProfilePage from "@/pages/profile-page";
-import WatchlistPage from "@/pages/watchlist-page";
-import AdminDashboard from "@/pages/admin/dashboard";
-import AdminContentManagement from "@/pages/admin/content-management";
-import AdminUserManagement from "@/pages/admin/user-management";
-import AdminAnalytics from "@/pages/admin/analytics";
+import { queryClient } from "@/lib/queryClient";
+import { AuthProvider } from "@/hooks/use-auth";
 
-// In development, remove protected routes for easier testing
-function App() {
+// Pages
+import HomePage from "@/pages/home-page";
+import AuthPage from "@/pages/auth-page";
+import NotFound from "@/pages/not-found";
+import { ProtectedRoute } from "@/lib/protected-route";
+import AdminDashboard from "@/pages/admin/dashboard";
+import { AdminRoute } from "@/lib/protected-route";
+
+// Import CSS
+import "./index.css";
+
+export default function App() {
   return (
-    <>
-      <Switch>
-        <Route path="/auth" component={AuthPage} />
-        <Route path="/" component={HomePage} />
-        <Route path="/watch/:id" component={WatchPage} />
-        <Route path="/profile" component={ProfilePage} />
-        <Route path="/watchlist" component={WatchlistPage} />
-        <Route path="/admin" component={AdminDashboard} />
-        <Route path="/admin/content" component={AdminContentManagement} />
-        <Route path="/admin/users" component={AdminUserManagement} />
-        <Route path="/admin/analytics" component={AdminAnalytics} />
-        <Route component={NotFound} />
-      </Switch>
-      <Toaster />
-    </>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <Router />
+        <Toaster />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
-export default App;
+function Router() {
+  return (
+    <Switch>
+      <ProtectedRoute path="/" component={HomePage} />
+      <Route path="/auth" component={AuthPage} />
+      <AdminRoute path="/admin/dashboard" component={AdminDashboard} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}

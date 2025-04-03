@@ -1,478 +1,489 @@
-import { users, dramaSeries, episodes, channels, watchlists, watchHistory, subscriptions, coinTransactions } from "@shared/schema";
-import type { User, InsertUser, DramaSeries, InsertDramaSeries, Episode, InsertEpisode, Channel, InsertChannel, Watchlist, InsertWatchlist, WatchHistory, InsertWatchHistory, Subscription, InsertSubscription, CoinTransaction, InsertCoinTransaction } from "@shared/schema";
-import createMemoryStore from "memorystore";
+import { 
+  User, InsertUser, 
+  DramaSeries, InsertDramaSeries, 
+  Episode, InsertEpisode,
+  Watchlist, InsertWatchlist,
+  WatchHistory, InsertWatchHistory,
+  Rating, InsertRating,
+  Transaction, InsertTransaction,
+  Advertisement, InsertAdvertisement
+} from "@shared/schema";
 import session from "express-session";
+import createMemoryStore from "memorystore";
 
 const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
-  // User operations
+  // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUserCoins(userId: number, coins: number): Promise<User | undefined>;
+  updateUser(id: number, user: Partial<User>): Promise<User>;
   
-  // Drama series operations
+  // Drama series methods
   getDramaSeries(id: number): Promise<DramaSeries | undefined>;
   getAllDramaSeries(): Promise<DramaSeries[]>;
-  getFeaturedDramaSeries(): Promise<DramaSeries[]>;
-  getTrendingDramaSeries(): Promise<DramaSeries[]>;
-  getPremiumDramaSeries(): Promise<DramaSeries[]>;
   getDramaSeriesByGenre(genre: string): Promise<DramaSeries[]>;
-  createDramaSeries(dramaSeries: InsertDramaSeries): Promise<DramaSeries>;
-  updateDramaSeries(id: number, dramaSeries: Partial<InsertDramaSeries>): Promise<DramaSeries | undefined>;
-  deleteDramaSeries(id: number): Promise<boolean>;
+  createDramaSeries(series: InsertDramaSeries): Promise<DramaSeries>;
+  updateDramaSeries(id: number, series: Partial<DramaSeries>): Promise<DramaSeries>;
+  deleteDramaSeries(id: number): Promise<void>;
+  searchDramaSeries(query: string): Promise<DramaSeries[]>;
   
-  // Episode operations
+  // Episode methods
   getEpisode(id: number): Promise<Episode | undefined>;
   getEpisodesBySeriesId(seriesId: number): Promise<Episode[]>;
   createEpisode(episode: InsertEpisode): Promise<Episode>;
-  updateEpisode(id: number, episode: Partial<InsertEpisode>): Promise<Episode | undefined>;
-  deleteEpisode(id: number): Promise<boolean>;
+  updateEpisode(id: number, episode: Partial<Episode>): Promise<Episode>;
+  deleteEpisode(id: number): Promise<void>;
   
-  // Channel operations
-  getChannel(id: number): Promise<Channel | undefined>;
-  getAllChannels(): Promise<Channel[]>;
-  getPopularChannels(limit: number): Promise<Channel[]>;
-  createChannel(channel: InsertChannel): Promise<Channel>;
-  
-  // Watchlist operations
-  getUserWatchlist(userId: number): Promise<(Watchlist & { series: DramaSeries })[]>;
+  // Watchlist methods
+  getWatchlistByUserId(userId: number): Promise<(Watchlist & { series: DramaSeries })[]>;
   addToWatchlist(watchlist: InsertWatchlist): Promise<Watchlist>;
-  removeFromWatchlist(userId: number, seriesId: number): Promise<boolean>;
+  removeFromWatchlist(userId: number, seriesId: number): Promise<void>;
+  isInWatchlist(userId: number, seriesId: number): Promise<boolean>;
   
-  // Watch history operations
-  getUserWatchHistory(userId: number): Promise<(WatchHistory & { episode: Episode, series: DramaSeries })[]>;
-  updateWatchHistory(watchHistory: InsertWatchHistory): Promise<WatchHistory>;
+  // Watch history methods
+  getWatchHistoryByUserId(userId: number): Promise<(WatchHistory & { episode: Episode & { series: DramaSeries } })[]>;
+  addToWatchHistory(history: InsertWatchHistory): Promise<WatchHistory>;
+  updateWatchHistory(id: number, history: Partial<WatchHistory>): Promise<WatchHistory>;
   
-  // Subscription operations
-  getUserSubscriptions(userId: number): Promise<(Subscription & { channel: Channel })[]>;
-  subscribeToChannel(subscription: InsertSubscription): Promise<Subscription>;
-  unsubscribeFromChannel(userId: number, channelId: number): Promise<boolean>;
+  // Rating methods
+  getRatingsBySeriesId(seriesId: number): Promise<(Rating & { user: Pick<User, 'id' | 'username' | 'profilePicture'> })[]>;
+  getRatingByUserAndSeries(userId: number, seriesId: number): Promise<Rating | undefined>;
+  createRating(rating: InsertRating): Promise<Rating>;
+  updateRating(id: number, rating: Partial<Rating>): Promise<Rating>;
+  deleteRating(id: number): Promise<void>;
   
-  // Coin transactions
-  createCoinTransaction(transaction: InsertCoinTransaction): Promise<CoinTransaction>;
-  getUserCoinTransactions(userId: number): Promise<CoinTransaction[]>;
+  // Transaction methods
+  getUserTransactions(userId: number): Promise<Transaction[]>;
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   
-  // Session store
-  sessionStore: any; // Using 'any' to bypass SessionStore type issues
+  // Advertisement methods
+  getActiveAdvertisements(placement: string): Promise<Advertisement[]>;
+  createAdvertisement(ad: InsertAdvertisement): Promise<Advertisement>;
+  updateAdvertisement(id: number, ad: Partial<Advertisement>): Promise<Advertisement>;
+  deleteAdvertisement(id: number): Promise<void>;
+  incrementAdImpressions(id: number): Promise<void>;
+  incrementAdClicks(id: number): Promise<void>;
+  
+  // Session store for authentication
+  sessionStore: any; // Using any type to avoid SessionStore type error
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private dramaSeries: Map<number, DramaSeries>;
-  private episodes: Map<number, Episode>;
-  private channels: Map<number, Channel>;
-  private watchlists: Map<number, Watchlist>;
-  private watchHistory: Map<number, WatchHistory>;
-  private subscriptions: Map<number, Subscription>;
-  private coinTransactions: Map<number, CoinTransaction>;
+  private users: User[] = [];
+  private dramaSeries: DramaSeries[] = [];
+  private episodes: Episode[] = [];
+  private watchlists: Watchlist[] = [];
+  private watchHistory: WatchHistory[] = [];
+  private ratings: Rating[] = [];
+  private transactions: Transaction[] = [];
+  private advertisements: Advertisement[] = [];
+  sessionStore: any; // Using any type to avoid SessionStore type error
   
-  sessionStore: any; // Using 'any' to bypass SessionStore type issues
-  
-  private userCurrentId: number;
-  private dramaSeriesCurrentId: number;
-  private episodeCurrentId: number;
-  private channelCurrentId: number;
-  private watchlistCurrentId: number;
-  private watchHistoryCurrentId: number;
-  private subscriptionCurrentId: number;
-  private coinTransactionCurrentId: number;
-
   constructor() {
-    this.users = new Map();
-    this.dramaSeries = new Map();
-    this.episodes = new Map();
-    this.channels = new Map();
-    this.watchlists = new Map();
-    this.watchHistory = new Map();
-    this.subscriptions = new Map();
-    this.coinTransactions = new Map();
-    
-    this.userCurrentId = 1;
-    this.dramaSeriesCurrentId = 1;
-    this.episodeCurrentId = 1;
-    this.channelCurrentId = 1;
-    this.watchlistCurrentId = 1;
-    this.watchHistoryCurrentId = 1;
-    this.subscriptionCurrentId = 1;
-    this.coinTransactionCurrentId = 1;
-    
     this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000 // 24 hours
+      checkPeriod: 86400000, // 24 hours
     });
-    
-    // Create default admin user
-    this.createUser({
-      username: "admin",
-      password: "password123", // This will be hashed in auth.ts
-      displayName: "Administrator",
-      email: "admin@shortdramaverse.com",
-      profileImage: "https://ui-avatars.com/api/?name=Admin&background=E50914&color=fff",
-    }).then(user => {
-      // Update the user to be an admin
-      this.users.set(user.id, { ...user, isAdmin: true, coins: 1000, isPremium: true });
-    });
-
-    // Create a regular test user for easy login
-    this.createUser({
-      username: "testuser",
-      password: "password123", // This will be hashed in auth.ts
-      displayName: "Test User",
-      email: "test@shortdramaverse.com",
-      profileImage: "https://ui-avatars.com/api/?name=Test+User&background=3498db&color=fff",
-    }).then(user => {
-      // Provide some coins to test premium features
-      this.users.set(user.id, { ...user, coins: 500 });
-    });
-
-    // Initialize example channels
-    this._initializeExampleChannels();
   }
   
-  // Initialize example channels
-  private async _initializeExampleChannels() {
-    const channels = [
-      {
-        name: "Drama Queens",
-        description: "The best romantic drama series",
-        logoUrl: "https://ui-avatars.com/api/?name=Drama+Queens&background=E50914&color=fff",
-        followerCount: 1200000
-      },
-      {
-        name: "K-Drama Hub",
-        description: "Korean drama series from all genres",
-        logoUrl: "https://ui-avatars.com/api/?name=K+Drama+Hub&background=0A84FF&color=fff",
-        followerCount: 980000
-      },
-      {
-        name: "Short Suspense",
-        description: "Edge of your seat suspense dramas",
-        logoUrl: "https://ui-avatars.com/api/?name=Short+Suspense&background=FFBE0B&color=fff",
-        followerCount: 650000
-      },
-      {
-        name: "Comedy Central",
-        description: "Laugh out loud comedy dramas",
-        logoUrl: "https://ui-avatars.com/api/?name=Comedy+Central&background=5856D6&color=fff",
-        followerCount: 1500000
-      },
-      {
-        name: "Action Shorts",
-        description: "Action-packed drama series",
-        logoUrl: "https://ui-avatars.com/api/?name=Action+Shorts&background=34C759&color=fff",
-        followerCount: 890000
-      }
-    ];
-    
-    for (const channel of channels) {
-      await this.createChannel(channel);
-    }
-  }
-
-  // User operations
+  // User methods
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    return this.users.find(user => user.id === id);
   }
-
+  
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase(),
-    );
+    return this.users.find(user => user.username === username);
   }
   
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email.toLowerCase() === email.toLowerCase(),
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const now = new Date();
-    const user: User = { 
-      ...insertUser, 
-      id, 
-      coins: 250, 
-      isPremium: false, 
-      isAdmin: false,
-      createdAt: now 
-    };
-    this.users.set(id, user);
-    return user;
+    return this.users.find(user => user.email === email);
   }
   
-  async updateUserCoins(userId: number, coins: number): Promise<User | undefined> {
-    const user = await this.getUser(userId);
-    if (!user) return undefined;
+  async createUser(user: InsertUser): Promise<User> {
+    const id = this.users.length > 0 ? Math.max(...this.users.map(u => u.id)) + 1 : 1;
+    const newUser: User = {
+      ...user,
+      id,
+      createdAt: new Date(),
+      coinBalance: 0,
+      isAdmin: false,
+      profilePicture: user.profilePicture || '',
+      displayName: user.displayName || user.username,
+      bio: user.bio || '',
+    };
+    this.users.push(newUser);
+    return newUser;
+  }
+  
+  async updateUser(id: number, user: Partial<User>): Promise<User> {
+    const index = this.users.findIndex(u => u.id === id);
+    if (index === -1) throw new Error(`User with id ${id} not found`);
     
-    const updatedUser = { ...user, coins };
-    this.users.set(userId, updatedUser);
-    return updatedUser;
+    this.users[index] = { ...this.users[index], ...user };
+    return this.users[index];
   }
-
-  // Drama series operations
+  
+  // Drama series methods
   async getDramaSeries(id: number): Promise<DramaSeries | undefined> {
-    return this.dramaSeries.get(id);
+    return this.dramaSeries.find(series => series.id === id);
   }
-
+  
   async getAllDramaSeries(): Promise<DramaSeries[]> {
-    return Array.from(this.dramaSeries.values());
+    return this.dramaSeries;
   }
-
-  async getFeaturedDramaSeries(): Promise<DramaSeries[]> {
-    return Array.from(this.dramaSeries.values()).filter(series => series.isFeatured);
-  }
-
-  async getTrendingDramaSeries(): Promise<DramaSeries[]> {
-    return Array.from(this.dramaSeries.values())
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 10);
-  }
-
-  async getPremiumDramaSeries(): Promise<DramaSeries[]> {
-    return Array.from(this.dramaSeries.values()).filter(series => series.isPremium);
-  }
-
+  
   async getDramaSeriesByGenre(genre: string): Promise<DramaSeries[]> {
-    return Array.from(this.dramaSeries.values()).filter(series => 
-      series.genre.includes(genre)
+    return this.dramaSeries.filter(series => series.genre.includes(genre));
+  }
+  
+  async createDramaSeries(series: InsertDramaSeries): Promise<DramaSeries> {
+    const id = this.dramaSeries.length > 0 ? Math.max(...this.dramaSeries.map(s => s.id)) + 1 : 1;
+    const newSeries: DramaSeries = {
+      ...series,
+      id,
+      averageRating: 0,
+    };
+    this.dramaSeries.push(newSeries);
+    return newSeries;
+  }
+  
+  async updateDramaSeries(id: number, series: Partial<DramaSeries>): Promise<DramaSeries> {
+    const index = this.dramaSeries.findIndex(s => s.id === id);
+    if (index === -1) throw new Error(`Drama series with id ${id} not found`);
+    
+    this.dramaSeries[index] = { ...this.dramaSeries[index], ...series };
+    return this.dramaSeries[index];
+  }
+  
+  async deleteDramaSeries(id: number): Promise<void> {
+    const index = this.dramaSeries.findIndex(s => s.id === id);
+    if (index === -1) throw new Error(`Drama series with id ${id} not found`);
+    
+    this.dramaSeries.splice(index, 1);
+    
+    // Delete related episodes
+    this.episodes = this.episodes.filter(episode => episode.seriesId !== id);
+    
+    // Delete related watchlists
+    this.watchlists = this.watchlists.filter(watchlist => watchlist.seriesId !== id);
+    
+    // Delete related ratings
+    this.ratings = this.ratings.filter(rating => rating.seriesId !== id);
+  }
+  
+  async searchDramaSeries(query: string): Promise<DramaSeries[]> {
+    const lowerQuery = query.toLowerCase();
+    return this.dramaSeries.filter(series => 
+      series.title.toLowerCase().includes(lowerQuery) || 
+      series.description.toLowerCase().includes(lowerQuery) ||
+      series.genre.some(g => g.toLowerCase().includes(lowerQuery)) ||
+      (series.actors && series.actors.some(a => a.toLowerCase().includes(lowerQuery))) ||
+      (series.director && series.director.toLowerCase().includes(lowerQuery))
     );
   }
-
-  async createDramaSeries(insertDramaSeries: InsertDramaSeries): Promise<DramaSeries> {
-    const id = this.dramaSeriesCurrentId++;
-    const now = new Date();
-    const dramaSeries: DramaSeries = { ...insertDramaSeries, id, createdAt: now };
-    this.dramaSeries.set(id, dramaSeries);
-    return dramaSeries;
-  }
-
-  async updateDramaSeries(id: number, dramaSeries: Partial<InsertDramaSeries>): Promise<DramaSeries | undefined> {
-    const existingSeries = await this.getDramaSeries(id);
-    if (!existingSeries) return undefined;
-    
-    const updatedSeries = { ...existingSeries, ...dramaSeries };
-    this.dramaSeries.set(id, updatedSeries);
-    return updatedSeries;
-  }
-
-  async deleteDramaSeries(id: number): Promise<boolean> {
-    return this.dramaSeries.delete(id);
-  }
-
-  // Episode operations
+  
+  // Episode methods
   async getEpisode(id: number): Promise<Episode | undefined> {
-    return this.episodes.get(id);
+    return this.episodes.find(episode => episode.id === id);
   }
-
+  
   async getEpisodesBySeriesId(seriesId: number): Promise<Episode[]> {
-    return Array.from(this.episodes.values())
-      .filter(episode => episode.seriesId === seriesId)
-      .sort((a, b) => {
-        if (a.seasonNumber !== b.seasonNumber) {
-          return a.seasonNumber - b.seasonNumber;
-        }
-        return a.episodeNumber - b.episodeNumber;
+    return this.episodes.filter(episode => episode.seriesId === seriesId)
+      .sort((a, b) => a.episodeNumber - b.episodeNumber);
+  }
+  
+  async createEpisode(episode: InsertEpisode): Promise<Episode> {
+    const id = this.episodes.length > 0 ? Math.max(...this.episodes.map(e => e.id)) + 1 : 1;
+    const newEpisode: Episode = {
+      ...episode,
+      id,
+    };
+    this.episodes.push(newEpisode);
+    return newEpisode;
+  }
+  
+  async updateEpisode(id: number, episode: Partial<Episode>): Promise<Episode> {
+    const index = this.episodes.findIndex(e => e.id === id);
+    if (index === -1) throw new Error(`Episode with id ${id} not found`);
+    
+    this.episodes[index] = { ...this.episodes[index], ...episode };
+    return this.episodes[index];
+  }
+  
+  async deleteEpisode(id: number): Promise<void> {
+    const index = this.episodes.findIndex(e => e.id === id);
+    if (index === -1) throw new Error(`Episode with id ${id} not found`);
+    
+    this.episodes.splice(index, 1);
+    
+    // Delete related watch history
+    this.watchHistory = this.watchHistory.filter(history => history.episodeId !== id);
+  }
+  
+  // Watchlist methods
+  async getWatchlistByUserId(userId: number): Promise<(Watchlist & { series: DramaSeries })[]> {
+    return this.watchlists
+      .filter(watchlist => watchlist.userId === userId)
+      .map(watchlist => {
+        const series = this.dramaSeries.find(s => s.id === watchlist.seriesId);
+        if (!series) throw new Error(`Drama series with id ${watchlist.seriesId} not found`);
+        return { ...watchlist, series };
       });
   }
-
-  async createEpisode(insertEpisode: InsertEpisode): Promise<Episode> {
-    const id = this.episodeCurrentId++;
-    const now = new Date();
-    const episode: Episode = { ...insertEpisode, id, createdAt: now };
-    this.episodes.set(id, episode);
-    return episode;
-  }
-
-  async updateEpisode(id: number, episode: Partial<InsertEpisode>): Promise<Episode | undefined> {
-    const existingEpisode = await this.getEpisode(id);
-    if (!existingEpisode) return undefined;
-    
-    const updatedEpisode = { ...existingEpisode, ...episode };
-    this.episodes.set(id, updatedEpisode);
-    return updatedEpisode;
-  }
-
-  async deleteEpisode(id: number): Promise<boolean> {
-    return this.episodes.delete(id);
-  }
-
-  // Channel operations
-  async getChannel(id: number): Promise<Channel | undefined> {
-    return this.channels.get(id);
-  }
-
-  async getAllChannels(): Promise<Channel[]> {
-    return Array.from(this.channels.values());
-  }
-
-  async getPopularChannels(limit: number): Promise<Channel[]> {
-    return Array.from(this.channels.values())
-      .sort((a, b) => b.followerCount - a.followerCount)
-      .slice(0, limit);
-  }
-
-  async createChannel(insertChannel: InsertChannel): Promise<Channel> {
-    const id = this.channelCurrentId++;
-    const now = new Date();
-    const channel: Channel = { ...insertChannel, id, createdAt: now };
-    this.channels.set(id, channel);
-    return channel;
-  }
-
-  // Watchlist operations
-  async getUserWatchlist(userId: number): Promise<(Watchlist & { series: DramaSeries })[]> {
-    const watchlistItems = Array.from(this.watchlists.values())
-      .filter(item => item.userId === userId);
-    
-    return watchlistItems.map(item => {
-      const series = this.dramaSeries.get(item.seriesId);
-      if (!series) throw new Error(`Series with ID ${item.seriesId} not found`);
-      return { ...item, series };
-    });
-  }
-
-  async addToWatchlist(insertWatchlist: InsertWatchlist): Promise<Watchlist> {
+  
+  async addToWatchlist(watchlist: InsertWatchlist): Promise<Watchlist> {
     // Check if already in watchlist
-    const existing = Array.from(this.watchlists.values()).find(
-      item => item.userId === insertWatchlist.userId && item.seriesId === insertWatchlist.seriesId
+    const existing = this.watchlists.find(
+      w => w.userId === watchlist.userId && w.seriesId === watchlist.seriesId
     );
-    
     if (existing) return existing;
     
-    const id = this.watchlistCurrentId++;
-    const now = new Date();
-    const watchlist: Watchlist = { ...insertWatchlist, id, addedAt: now };
-    this.watchlists.set(id, watchlist);
-    return watchlist;
+    const id = this.watchlists.length > 0 ? Math.max(...this.watchlists.map(w => w.id)) + 1 : 1;
+    const newWatchlist: Watchlist = {
+      ...watchlist,
+      id,
+      addedAt: new Date(),
+    };
+    this.watchlists.push(newWatchlist);
+    return newWatchlist;
   }
-
-  async removeFromWatchlist(userId: number, seriesId: number): Promise<boolean> {
-    const watchlistItem = Array.from(this.watchlists.values()).find(
-      item => item.userId === userId && item.seriesId === seriesId
+  
+  async removeFromWatchlist(userId: number, seriesId: number): Promise<void> {
+    const index = this.watchlists.findIndex(
+      w => w.userId === userId && w.seriesId === seriesId
     );
+    if (index === -1) throw new Error(`Watchlist entry not found`);
     
-    if (!watchlistItem) return false;
-    return this.watchlists.delete(watchlistItem.id);
+    this.watchlists.splice(index, 1);
   }
-
-  // Watch history operations
-  async getUserWatchHistory(userId: number): Promise<(WatchHistory & { episode: Episode, series: DramaSeries })[]> {
-    const historyItems = Array.from(this.watchHistory.values())
-      .filter(item => item.userId === userId)
-      .sort((a, b) => b.watchedAt.getTime() - a.watchedAt.getTime());
-    
-    return historyItems.map(item => {
-      const episode = this.episodes.get(item.episodeId);
-      if (!episode) throw new Error(`Episode with ID ${item.episodeId} not found`);
-      
-      const series = this.dramaSeries.get(episode.seriesId);
-      if (!series) throw new Error(`Series with ID ${episode.seriesId} not found`);
-      
-      return { ...item, episode, series };
-    });
-  }
-
-  async updateWatchHistory(insertWatchHistory: InsertWatchHistory): Promise<WatchHistory> {
-    // Check if already in history
-    const existing = Array.from(this.watchHistory.values()).find(
-      item => item.userId === insertWatchHistory.userId && item.episodeId === insertWatchHistory.episodeId
+  
+  async isInWatchlist(userId: number, seriesId: number): Promise<boolean> {
+    return this.watchlists.some(
+      w => w.userId === userId && w.seriesId === seriesId
     );
-    
-    const now = new Date();
+  }
+  
+  // Watch history methods
+  async getWatchHistoryByUserId(userId: number): Promise<(WatchHistory & { episode: Episode & { series: DramaSeries } })[]> {
+    return this.watchHistory
+      .filter(history => history.userId === userId)
+      .map(history => {
+        const episode = this.episodes.find(e => e.id === history.episodeId);
+        if (!episode) throw new Error(`Episode with id ${history.episodeId} not found`);
+        
+        const series = this.dramaSeries.find(s => s.id === episode.seriesId);
+        if (!series) throw new Error(`Drama series with id ${episode.seriesId} not found`);
+        
+        return {
+          ...history,
+          episode: {
+            ...episode,
+            series,
+          },
+        };
+      });
+  }
+  
+  async addToWatchHistory(history: InsertWatchHistory): Promise<WatchHistory> {
+    // Check if already in watch history
+    const existing = this.watchHistory.find(
+      h => h.userId === history.userId && h.episodeId === history.episodeId
+    );
     
     if (existing) {
-      const updated: WatchHistory = { 
-        ...existing, 
-        progress: insertWatchHistory.progress, 
-        isCompleted: insertWatchHistory.isCompleted,
-        watchedAt: now
-      };
-      this.watchHistory.set(existing.id, updated);
-      return updated;
+      // Update existing record
+      return this.updateWatchHistory(existing.id, history);
     }
     
-    const id = this.watchHistoryCurrentId++;
-    const watchHistory: WatchHistory = { ...insertWatchHistory, id, watchedAt: now };
-    this.watchHistory.set(id, watchHistory);
-    return watchHistory;
+    const id = this.watchHistory.length > 0 ? Math.max(...this.watchHistory.map(h => h.id)) + 1 : 1;
+    const newHistory: WatchHistory = {
+      ...history,
+      id,
+      watchedAt: new Date(),
+      completed: history.completed || false,
+      progress: history.progress || 0,
+    };
+    this.watchHistory.push(newHistory);
+    return newHistory;
   }
-
-  // Subscription operations
-  async getUserSubscriptions(userId: number): Promise<(Subscription & { channel: Channel })[]> {
-    const subscriptions = Array.from(this.subscriptions.values())
-      .filter(sub => sub.userId === userId);
+  
+  async updateWatchHistory(id: number, history: Partial<WatchHistory>): Promise<WatchHistory> {
+    const index = this.watchHistory.findIndex(h => h.id === id);
+    if (index === -1) throw new Error(`Watch history entry with id ${id} not found`);
     
-    return subscriptions.map(sub => {
-      const channel = this.channels.get(sub.channelId);
-      if (!channel) throw new Error(`Channel with ID ${sub.channelId} not found`);
-      return { ...sub, channel };
-    });
+    this.watchHistory[index] = {
+      ...this.watchHistory[index],
+      ...history,
+      watchedAt: new Date(),
+    };
+    return this.watchHistory[index];
   }
-
-  async subscribeToChannel(insertSubscription: InsertSubscription): Promise<Subscription> {
-    // Check if already subscribed
-    const existing = Array.from(this.subscriptions.values()).find(
-      sub => sub.userId === insertSubscription.userId && sub.channelId === insertSubscription.channelId
-    );
-    
-    if (existing) return existing;
-    
-    const id = this.subscriptionCurrentId++;
-    const now = new Date();
-    const subscription: Subscription = { ...insertSubscription, id, subscribedAt: now };
-    this.subscriptions.set(id, subscription);
-    
-    // Update channel follower count
-    const channel = await this.getChannel(insertSubscription.channelId);
-    if (channel) {
-      const updatedChannel = { ...channel, followerCount: channel.followerCount + 1 };
-      this.channels.set(channel.id, updatedChannel);
-    }
-    
-    return subscription;
-  }
-
-  async unsubscribeFromChannel(userId: number, channelId: number): Promise<boolean> {
-    const subscription = Array.from(this.subscriptions.values()).find(
-      sub => sub.userId === userId && sub.channelId === channelId
-    );
-    
-    if (!subscription) return false;
-    
-    const deleted = this.subscriptions.delete(subscription.id);
-    
-    // Update channel follower count
-    if (deleted) {
-      const channel = await this.getChannel(channelId);
-      if (channel) {
-        const updatedChannel = { 
-          ...channel, 
-          followerCount: Math.max(0, channel.followerCount - 1)
+  
+  // Rating methods
+  async getRatingsBySeriesId(seriesId: number): Promise<(Rating & { user: Pick<User, 'id' | 'username' | 'profilePicture'> })[]> {
+    return this.ratings
+      .filter(rating => rating.seriesId === seriesId)
+      .map(rating => {
+        const user = this.users.find(u => u.id === rating.userId);
+        if (!user) throw new Error(`User with id ${rating.userId} not found`);
+        
+        return {
+          ...rating,
+          user: {
+            id: user.id,
+            username: user.username,
+            profilePicture: user.profilePicture,
+          },
         };
-        this.channels.set(channel.id, updatedChannel);
-      }
+      });
+  }
+  
+  async getRatingByUserAndSeries(userId: number, seriesId: number): Promise<Rating | undefined> {
+    return this.ratings.find(
+      r => r.userId === userId && r.seriesId === seriesId
+    );
+  }
+  
+  async createRating(rating: InsertRating): Promise<Rating> {
+    // Check if user has already rated this series
+    const existing = await this.getRatingByUserAndSeries(rating.userId, rating.seriesId);
+    if (existing) {
+      // Update existing rating
+      return this.updateRating(existing.id, rating);
     }
     
-    return deleted;
+    const id = this.ratings.length > 0 ? Math.max(...this.ratings.map(r => r.id)) + 1 : 1;
+    const newRating: Rating = {
+      ...rating,
+      id,
+      createdAt: new Date(),
+    };
+    this.ratings.push(newRating);
+    
+    // Update drama series average rating
+    await this.updateSeriesAverageRating(rating.seriesId);
+    
+    return newRating;
   }
-
-  // Coin transactions
-  async createCoinTransaction(insertTransaction: InsertCoinTransaction): Promise<CoinTransaction> {
-    const id = this.coinTransactionCurrentId++;
-    const now = new Date();
-    const transaction: CoinTransaction = { ...insertTransaction, id, transactionDate: now };
-    this.coinTransactions.set(id, transaction);
-    return transaction;
+  
+  async updateRating(id: number, rating: Partial<Rating>): Promise<Rating> {
+    const index = this.ratings.findIndex(r => r.id === id);
+    if (index === -1) throw new Error(`Rating with id ${id} not found`);
+    
+    this.ratings[index] = { ...this.ratings[index], ...rating };
+    
+    // Update drama series average rating
+    await this.updateSeriesAverageRating(this.ratings[index].seriesId);
+    
+    return this.ratings[index];
   }
-
-  async getUserCoinTransactions(userId: number): Promise<CoinTransaction[]> {
-    return Array.from(this.coinTransactions.values())
+  
+  async deleteRating(id: number): Promise<void> {
+    const index = this.ratings.findIndex(r => r.id === id);
+    if (index === -1) throw new Error(`Rating with id ${id} not found`);
+    
+    const seriesId = this.ratings[index].seriesId;
+    this.ratings.splice(index, 1);
+    
+    // Update drama series average rating
+    await this.updateSeriesAverageRating(seriesId);
+  }
+  
+  private async updateSeriesAverageRating(seriesId: number): Promise<void> {
+    const seriesRatings = this.ratings.filter(r => r.seriesId === seriesId);
+    const seriesIndex = this.dramaSeries.findIndex(s => s.id === seriesId);
+    
+    if (seriesIndex === -1) throw new Error(`Drama series with id ${seriesId} not found`);
+    
+    if (seriesRatings.length === 0) {
+      this.dramaSeries[seriesIndex].averageRating = 0;
+    } else {
+      const totalRating = seriesRatings.reduce((sum, r) => sum + r.rating, 0);
+      this.dramaSeries[seriesIndex].averageRating = Math.round(totalRating / seriesRatings.length);
+    }
+  }
+  
+  // Transaction methods
+  async getUserTransactions(userId: number): Promise<Transaction[]> {
+    return this.transactions
       .filter(transaction => transaction.userId === userId)
-      .sort((a, b) => b.transactionDate.getTime() - a.transactionDate.getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const id = this.transactions.length > 0 ? Math.max(...this.transactions.map(t => t.id)) + 1 : 1;
+    const newTransaction: Transaction = {
+      ...transaction,
+      id,
+      createdAt: new Date(),
+    };
+    this.transactions.push(newTransaction);
+    
+    // Update user coin balance
+    const user = await this.getUser(transaction.userId);
+    if (!user) throw new Error(`User with id ${transaction.userId} not found`);
+    
+    await this.updateUser(user.id, {
+      coinBalance: user.coinBalance + transaction.amount,
+    });
+    
+    return newTransaction;
+  }
+  
+  // Advertisement methods
+  async getActiveAdvertisements(placement: string): Promise<Advertisement[]> {
+    const now = new Date();
+    return this.advertisements.filter(ad => 
+      ad.isActive && 
+      ad.placement === placement &&
+      new Date(ad.startDate) <= now &&
+      new Date(ad.endDate) >= now
+    );
+  }
+  
+  async createAdvertisement(ad: InsertAdvertisement): Promise<Advertisement> {
+    const id = this.advertisements.length > 0 ? Math.max(...this.advertisements.map(a => a.id)) + 1 : 1;
+    const newAd: Advertisement = {
+      ...ad,
+      id,
+      impressions: 0,
+      clicks: 0,
+    };
+    this.advertisements.push(newAd);
+    return newAd;
+  }
+  
+  async updateAdvertisement(id: number, ad: Partial<Advertisement>): Promise<Advertisement> {
+    const index = this.advertisements.findIndex(a => a.id === id);
+    if (index === -1) throw new Error(`Advertisement with id ${id} not found`);
+    
+    this.advertisements[index] = { ...this.advertisements[index], ...ad };
+    return this.advertisements[index];
+  }
+  
+  async deleteAdvertisement(id: number): Promise<void> {
+    const index = this.advertisements.findIndex(a => a.id === id);
+    if (index === -1) throw new Error(`Advertisement with id ${id} not found`);
+    
+    this.advertisements.splice(index, 1);
+  }
+  
+  async incrementAdImpressions(id: number): Promise<void> {
+    const index = this.advertisements.findIndex(a => a.id === id);
+    if (index === -1) throw new Error(`Advertisement with id ${id} not found`);
+    
+    this.advertisements[index].impressions++;
+  }
+  
+  async incrementAdClicks(id: number): Promise<void> {
+    const index = this.advertisements.findIndex(a => a.id === id);
+    if (index === -1) throw new Error(`Advertisement with id ${id} not found`);
+    
+    this.advertisements[index].clicks++;
   }
 }
 
+// Export a singleton instance of the storage
 export const storage = new MemStorage();

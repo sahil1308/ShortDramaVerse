@@ -1,216 +1,114 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
-  ShieldCheck,
+  ArrowLeft,
   Film,
   Users,
-  BarChart,
-  TrendingUp,
-  PlayCircle,
-  Eye,
-  Layers,
-  ChevronRight,
-  Clock
+  DollarSign,
+  BarChart2,
+  MessageSquare,
+  Image,
 } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
-import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { AdminLayout } from "@/components/layout/admin";
-
-// Using AdminLayout imported from @/components/layout/admin
-
-// Mock data for charts
-const viewsData = [
-  { name: 'Mon', views: 4000 },
-  { name: 'Tue', views: 3000 },
-  { name: 'Wed', views: 5000 },
-  { name: 'Thu', views: 2780 },
-  { name: 'Fri', views: 4890 },
-  { name: 'Sat', views: 6390 },
-  { name: 'Sun', views: 5490 },
-];
 
 export default function AdminDashboard() {
-  // Fetch analytics data
-  const { data: userAnalytics } = useQuery({
-    queryKey: ["/api/admin/analytics/users"],
-  });
+  const { user, logoutMutation } = useAuth();
 
-  const { data: contentAnalytics } = useQuery({
-    queryKey: ["/api/admin/analytics/content"],
-  });
-
-  const { data: revenueAnalytics } = useQuery({
-    queryKey: ["/api/admin/analytics/revenue"],
-  });
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
 
   return (
-    <AdminLayout>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Users
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{userAnalytics?.totalUsers || "..."}</div>
-            <p className="text-xs text-muted-foreground">
-              +{userAnalytics?.newUsersToday || "..."} today
-            </p>
-          </CardContent>
-        </Card>
+    <div className="container mx-auto p-4">
+      <header className="flex justify-between items-center py-4 mb-8">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to App
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-bold ml-4">Admin Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <span>Admin: {user?.displayName || user?.username}</span>
+          <Button variant="outline" size="sm" onClick={handleLogout}>
+            Logout
+          </Button>
+        </div>
+      </header>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Content
-            </CardTitle>
-            <Layers className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{contentAnalytics?.totalDramas || "..."}</div>
-            <p className="text-xs text-muted-foreground">
-              {contentAnalytics?.totalEpisodes || "..."} episodes
-            </p>
-          </CardContent>
-        </Card>
+      <main>
+        <div className="bg-primary/5 rounded-lg p-8 mb-8">
+          <h2 className="text-3xl font-bold mb-4">Welcome to the Admin Portal</h2>
+          <p className="max-w-2xl">
+            Manage content, users, advertisements, and monitor platform metrics
+            from this central dashboard.
+          </p>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Views
-            </CardTitle>
-            <Eye className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{contentAnalytics?.totalViews || "..."}</div>
-            <p className="text-xs text-muted-foreground">
-              Across all content
-            </p>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <DashboardCard
+            title="Content Management"
+            description="Upload, edit, and manage drama series and episodes"
+            link="/admin/content"
+            icon={<Film className="h-6 w-6" />}
+          />
+          <DashboardCard
+            title="User Management"
+            description="View and manage user accounts and permissions"
+            link="/admin/users"
+            icon={<Users className="h-6 w-6" />}
+          />
+          <DashboardCard
+            title="Coin System"
+            description="Manage virtual currency and user transactions"
+            link="/admin/coins"
+            icon={<DollarSign className="h-6 w-6" />}
+          />
+          <DashboardCard
+            title="Analytics"
+            description="View platform metrics and user engagement data"
+            link="/admin/analytics"
+            icon={<BarChart2 className="h-6 w-6" />}
+          />
+          <DashboardCard
+            title="Feedback"
+            description="Review user comments and ratings"
+            link="/admin/feedback"
+            icon={<MessageSquare className="h-6 w-6" />}
+          />
+          <DashboardCard
+            title="Advertisements"
+            description="Manage ad placements and campaigns"
+            link="/admin/ads"
+            icon={<Image className="h-6 w-6" />}
+          />
+        </div>
+      </main>
+    </div>
+  );
+}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Coins Spent
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{revenueAnalytics?.totalCoinsSpent || "..."}</div>
-            <p className="text-xs text-muted-foreground">
-              {revenueAnalytics?.premiumUnlocks || "..."} premium unlocks
-            </p>
-          </CardContent>
-        </Card>
+type DashboardCardProps = {
+  title: string;
+  description: string;
+  link: string;
+  icon: React.ReactNode;
+};
+
+function DashboardCard({ title, description, link, icon }: DashboardCardProps) {
+  return (
+    <Link href={link}>
+      <div className="border rounded-lg p-6 hover:bg-primary/5 transition-colors cursor-pointer h-full">
+        <div className="flex items-center mb-4">
+          <div className="bg-primary/10 p-3 rounded-lg text-primary mr-4">
+            {icon}
+          </div>
+          <h3 className="font-bold text-xl">{title}</h3>
+        </div>
+        <p className="text-muted-foreground">{description}</p>
       </div>
-
-      <div className="mb-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Viewing Trends</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsBarChart data={viewsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="views" fill="hsl(0 92% 49%)" radius={[4, 4, 0, 0]} />
-                </RechartsBarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Performing Content</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {revenueAnalytics?.mostProfitableSeries ? (
-              <div className="space-y-3">
-                {revenueAnalytics.mostProfitableSeries.map((series: any) => (
-                  <div key={series.id} className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <PlayCircle className="h-5 w-5 text-primary mr-2" />
-                      <div>
-                        <p className="font-medium">{series.title}</p>
-                        <p className="text-xs text-muted-foreground">Revenue: {series.revenue} coins</p>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon">
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-40 text-muted-foreground">
-                Loading data...
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center">
-                <div className="mr-3 bg-primary/10 rounded-full p-2">
-                  <Film className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">New content uploaded</p>
-                  <p className="text-xs text-muted-foreground">
-                    <Clock className="inline-block h-3 w-3 mr-1" />
-                    10 minutes ago
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center">
-                <div className="mr-3 bg-primary/10 rounded-full p-2">
-                  <Users className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">5 new user registrations</p>
-                  <p className="text-xs text-muted-foreground">
-                    <Clock className="inline-block h-3 w-3 mr-1" />
-                    2 hours ago
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center">
-                <div className="mr-3 bg-primary/10 rounded-full p-2">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">Premium content purchases</p>
-                  <p className="text-xs text-muted-foreground">
-                    <Clock className="inline-block h-3 w-3 mr-1" />
-                    5 hours ago
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </AdminLayout>
+    </Link>
   );
 }
