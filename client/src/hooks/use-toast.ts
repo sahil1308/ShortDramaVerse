@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 export type ToastProps = {
-  id: string;
+  id?: string; // Make id optional since it's auto-generated if not provided
   title?: string;
   description?: string;
   action?: React.ReactNode;
@@ -10,6 +10,7 @@ export type ToastProps = {
 };
 
 export type Toast = ToastProps & {
+  id: string;
   open: boolean;
 };
 
@@ -129,7 +130,7 @@ export function useToast() {
       setState((prevState) =>
         reducer(prevState, {
           type: actionTypes.ADD_TOAST,
-          toast: { ...props, id, open: true },
+          toast: { ...props, id },
         })
       );
 

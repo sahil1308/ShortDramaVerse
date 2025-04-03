@@ -8,8 +8,11 @@ import { AuthProvider } from "@/hooks/use-auth";
 import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
 import NotFound from "@/pages/not-found";
+import SeriesDetailPage from "@/pages/series-detail";
+import EpisodePlayerPage from "@/pages/episode-player";
 import { ProtectedRoute } from "@/lib/protected-route";
 import AdminDashboard from "@/pages/admin/dashboard";
+import AdminAdsPage from "@/pages/admin/ads";
 import { AdminRoute } from "@/lib/protected-route";
 
 // Import CSS
@@ -30,8 +33,11 @@ function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={HomePage} />
+      <ProtectedRoute path="/series/:id" component={SeriesDetailPage} />
+      <ProtectedRoute path="/episode/:id" component={EpisodePlayerPage} />
       <Route path="/auth" component={AuthPage} />
       <AdminRoute path="/admin/dashboard" component={AdminDashboard} />
+      <AdminRoute path="/admin/ads" component={AdminAdsPage} />
       <Route component={NotFound} />
     </Switch>
   );

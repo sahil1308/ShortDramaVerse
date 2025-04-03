@@ -44,7 +44,9 @@ async function main() {
   // Also listen on workflow port (5000) for compatibility
   const workflowServer = express();
   workflowServer.get('*', (req, res) => {
-    res.redirect(`http://${req.hostname}:${port}${req.url}`);
+    // Use the same protocol that the request came in with
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    res.redirect(`${protocol}://${req.hostname}:${port}${req.url}`);
   });
   workflowServer.listen(workflowPort, "0.0.0.0", () => {
     console.log(`Workflow port listening on ${workflowPort} (redirecting to ${port})`);
