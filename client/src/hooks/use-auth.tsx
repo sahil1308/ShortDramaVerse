@@ -1,14 +1,16 @@
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useState, useEffect } from "react";
 import {
   useQuery,
   useMutation,
   UseMutationResult,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { insertUserSchema, User as SelectUser, InsertUser } from "@shared/schema";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
+import { getQueryFn, apiRequest } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 
+// Define types for our auth context
 type AuthContextType = {
   user: SelectUser | null;
   isLoading: boolean;
@@ -30,10 +32,26 @@ const registerSchema = insertUserSchema.extend({
 
 type RegisterData = z.infer<typeof registerSchema>;
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+// Create a default context value to avoid null checks
+const defaultContextValue: AuthContextType = {
+  user: null,
+  isLoading: true,
+  error: null,
+  loginMutation: {} as UseMutationResult<SelectUser, Error, LoginData>,
+  logoutMutation: {} as UseMutationResult<void, Error, void>,
+  registerMutation: {} as UseMutationResult<SelectUser, Error, RegisterData>,
+};
 
+// Create the auth context with a default value
+export const AuthContext = createContext<AuthContextType>(defaultContextValue);
+
+// Create the auth provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [contextReady, setContextReady] = useState(false);
+
+  // Query for the current user
   const {
     data: user,
     error,
@@ -43,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  // Create the login mutation
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/login", credentials);
@@ -64,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Create the register mutation
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterData) => {
       // Remove confirmPassword before sending to the server
@@ -87,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Create the logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/logout");
@@ -107,30 +128,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Set context as ready after initial load
+  useEffect(() => {
+    if (!isLoading) {
+      setContextReady(true);
+    }
+  }, [isLoading]);
+
+  // Create the context value
+  const value: AuthContextType = {
+    user: user ?? null,
+    isLoading,
+    error,
+    loginMutation,
+    logoutMutation,
+    registerMutation,
+  };
+
+  // Show a loading state while context is initializing
+  if (!contextReady) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  // Provide the auth context to child components
   return (
-    <AuthContext.Provider
-      value={{
-        user: user ?? null,
-        isLoading,
-        error,
-        loginMutation,
-        logoutMutation,
-        registerMutation,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
+// Custom hook to access the auth context
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  return useContext(AuthContext);
 }
 
+// Export the form configurations
 export const registerFormConfig = {
   schema: registerSchema,
   defaultValues: {
