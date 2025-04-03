@@ -1,59 +1,74 @@
-import { ParamListBase } from '@react-navigation/native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+// Navigation Types
+export type RootStackParamList = {
+  // Auth
+  SignIn: undefined;
+  SignUp: undefined;
+  
+  // Main
+  MainTabs: undefined;
+  
+  // Content
+  SeriesDetails: { seriesId: number };
+  EpisodePlayer: { episodeId: number, seriesId: number };
+  
+  // User
+  UserProfile: undefined;
+  
+  // Utility
+  LoadingScreen: { message?: string };
+};
 
-// User-related types
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  displayName?: string;
-  profilePicture?: string;
-  bio?: string;
-  isAdmin: boolean;
-  coinBalance: number;
-  createdAt: string;
-}
+export type TabParamList = {
+  Home: undefined;
+  Search: undefined;
+  Watchlist: undefined;
+  Profile: undefined;
+};
 
-// Authentication response type
-export interface AuthResponse {
-  user: User;
-  token: string;
-}
-
-// Drama series types
+// API Response Types
 export interface DramaSeries {
   id: number;
   title: string;
   description: string;
-  coverImage: string;
   genre: string[];
-  releaseYear: number;
-  director: string;
-  actors: string[];
+  coverImage: string;
+  releaseDate: string;
+  isPremium: boolean;
+  director?: string;
+  cast?: string[];
   averageRating: number;
-  totalEpisodes: number;
-  isFeatured: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
-// Episode types
 export interface Episode {
   id: number;
   seriesId: number;
   title: string;
   description: string;
-  thumbnailImage: string;
-  videoUrl: string;
-  duration: number;
   episodeNumber: number;
+  duration: number;
+  videoUrl: string;
+  thumbnail?: string;
   isPremium: boolean;
-  coinPrice: number;
-  releaseDate: string;
   viewCount: number;
+  releaseDate: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
-// Watchlist type
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string | null;
+  profilePicture: string | null;
+  bio: string | null;
+  createdAt: string | null;
+  isAdmin: boolean | null;
+  coinBalance: number | null;
+}
+
 export interface Watchlist {
   id: number;
   userId: number;
@@ -62,18 +77,17 @@ export interface Watchlist {
   series?: DramaSeries;
 }
 
-// Watch history type
 export interface WatchHistory {
   id: number;
   userId: number;
   episodeId: number;
   progress: number;
   completed: boolean;
-  lastWatched: string;
-  episode?: Episode;
+  watchedAt: string;
+  updatedAt: string;
+  episode?: Episode & { series?: DramaSeries };
 }
 
-// Rating type
 export interface Rating {
   id: number;
   userId: number;
@@ -81,71 +95,54 @@ export interface Rating {
   rating: number;
   comment?: string;
   createdAt: string;
-  user?: {
-    id: number;
-    username: string;
-    profilePicture?: string;
-  };
+  updatedAt?: string;
+  user?: Pick<User, 'id' | 'username' | 'profilePicture'>;
 }
 
-// Transaction type
 export interface Transaction {
   id: number;
   userId: number;
   amount: number;
-  type: 'purchase' | 'refill';
-  description: string;
-  createdAt: string;
-  episodeId?: number;
-  episode?: Episode;
+  type: 'purchase' | 'subscription' | 'refund';
+  status: 'pending' | 'completed' | 'failed';
+  details?: string;
+  transactionDate: string;
 }
 
-// Advertisement type
 export interface Advertisement {
   id: number;
   title: string;
   description: string;
   imageUrl: string;
-  targetUrl: string;
+  linkUrl: string;
   placement: string;
   startDate: string;
   endDate: string;
+  isActive: boolean;
   impressions: number;
   clicks: number;
-  active: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
-// Error type for API responses
+// Auth types
+export interface AuthState {
+  user: User | null;
+  token: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
+// API Response types
+export interface ApiResponse<T> {
+  data: T;
+  message?: string;
+  error?: string;
+}
+
+// Error response
 export interface ApiError {
-  status: number;
   message: string;
-  errors?: Record<string, string[]>;
+  status: number;
+  details?: any;
 }
-
-// Navigation Types
-
-// Root stack param list
-export type RootStackParamList = {
-  MainTabs: undefined;
-  SignIn: undefined;
-  SignUp: undefined;
-  SeriesDetails: { seriesId: number };
-  EpisodePlayer: { episodeId: number };
-  UserProfile: { userId: number };
-  LoadingScreen: { message?: string };
-};
-
-// Tab navigation param list
-export type TabParamList = {
-  Home: undefined;
-  Search: undefined;
-  Watchlist: undefined;
-  Profile: undefined;
-};
-
-// Screen props types
-export type RootStackScreenProps<T extends keyof RootStackParamList> = 
-  NativeStackScreenProps<RootStackParamList, T>;
-
-export type TabScreenProps<T extends keyof TabParamList> = 
-  BottomTabScreenProps<TabParamList, T>;

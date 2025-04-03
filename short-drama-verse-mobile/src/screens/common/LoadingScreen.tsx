@@ -1,42 +1,51 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { View, Text, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
+import { useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '@/types/drama';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-/**
- * Loading Screen Component
- * Used for displaying loading states and transitions between screens
- * Can display custom loading messages passed through route params
- */
+// Get screen dimensions
+const { width, height } = Dimensions.get('window');
+
+// Colors constants
+const colors = {
+  primary: '#E50914',
+  background: '#121212',
+  text: '#FFFFFF',
+  textSecondary: '#AAAAAA',
+};
+
+// Default loading messages
+const DEFAULT_LOADING_MESSAGE = 'Loading...';
+
 type LoadingScreenProps = NativeStackScreenProps<RootStackParamList, 'LoadingScreen'>;
 
-const LoadingScreen: React.FC<LoadingScreenProps> = ({ route }) => {
-  // Get custom message from route params or use default
-  const message = route.params?.message || 'Loading...';
+export default function LoadingScreen({ route }: LoadingScreenProps) {
+  // Get message from route params or use default
+  const message = route?.params?.message || DEFAULT_LOADING_MESSAGE;
   
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#8E44AD" />
-      <Text style={styles.text}>{message}</Text>
+      <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
+      <Text style={styles.message}>{message}</Text>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: colors.background,
     alignItems: 'center',
-    backgroundColor: '#0B0C10',
+    justifyContent: 'center',
     padding: 20,
   },
-  text: {
-    marginTop: 20,
+  spinner: {
+    marginBottom: 20,
+  },
+  message: {
+    color: colors.text,
     fontSize: 16,
-    color: '#C5C6C7',
     textAlign: 'center',
   },
 });
-
-export default LoadingScreen;

@@ -2,72 +2,75 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
-import { RootNavigator } from '@/navigation/RootNavigator';
+import RootNavigator from '@/navigation/RootNavigator';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import { View, Text, StyleSheet } from 'react-native';
 import { QueryProvider } from '@/lib/queryClient';
 import { AuthProvider } from '@/hooks/useAuth';
+import { Ionicons } from '@expo/vector-icons';
 
-// Keep the splash screen visible while we fetch resources
+// Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
-  const [appIsReady, setAppIsReady] = useState(false);
-
+  const [isReady, setIsReady] = useState(false);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
+  
+  // Load any resources or data needed for the app
   useEffect(() => {
     async function prepare() {
       try {
-        // Pre-load fonts, make any API calls you need to do here
+        // Pre-load fonts
         await Font.loadAsync({
-          'Poppins-Regular': require('./assets/fonts/Poppins-Regular.ttf'),
-          'Poppins-Medium': require('./assets/fonts/Poppins-Medium.ttf'),
-          'Poppins-SemiBold': require('./assets/fonts/Poppins-SemiBold.ttf'),
-          'Poppins-Bold': require('./assets/fonts/Poppins-Bold.ttf'),
+          ...Ionicons.font,
         });
+        setFontsLoaded(true);
         
-        // Artificially delay for a smoother splash screen effect
+        // Artificially delay for 1 second to make splash screen more noticeable
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (e) {
-        console.warn('Error loading resources:', e);
+        console.warn('Error loading assets:', e);
       } finally {
-        // Tell the application to render
-        setAppIsReady(true);
+        setIsReady(true);
       }
     }
 
     prepare();
   }, []);
 
+  // Once everything is ready, hide the splash screen
   const onLayoutRootView = useCallback(async () => {
-    if (appIsReady) {
-      // This tells the splash screen to hide immediately
+    if (isReady && fontsLoaded) {
+      // Hide the splash screen
       await SplashScreen.hideAsync();
     }
-  }, [appIsReady]);
+  }, [isReady, fontsLoaded]);
 
-  if (!appIsReady) {
+  if (!isReady || !fontsLoaded) {
     return null;
   }
 
+  // Main app component
   return (
-    <View style={styles.container} onLayout={onLayoutRootView}>
-      <SafeAreaProvider>
-        <QueryProvider>
-          <AuthProvider>
+    <SafeAreaProvider>
+      <QueryProvider>
+        <AuthProvider>
+          <View style={styles.container} onLayout={onLayoutRootView}>
             <NavigationContainer>
               <RootNavigator />
-              <StatusBar style="auto" />
             </NavigationContainer>
-          </AuthProvider>
-        </QueryProvider>
-      </SafeAreaProvider>
-    </View>
+            <StatusBar style="light" />
+          </View>
+        </AuthProvider>
+      </QueryProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#121212',
   },
 });

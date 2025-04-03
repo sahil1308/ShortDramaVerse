@@ -1,144 +1,121 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
   FlatList,
   TouchableOpacity,
   Image,
-  ScrollView,
   RefreshControl,
+  Dimensions,
   SafeAreaView,
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '@/navigation/RootNavigator';
+import { RootStackParamList } from '@/types/drama';
 import { useQuery } from '@tanstack/react-query';
-import { api, endpoints } from '@/services/api';
+import api, { endpoints } from '@/services/api';
 import { DramaSeries } from '@/types/drama';
-import { LoadingScreen } from '@/screens/common/LoadingScreen';
+import DramaCard from '@/components/DramaCard';
+import LoadingScreen from '@/screens/common/LoadingScreen';
 import { StatusBar } from 'expo-status-bar';
 
-type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+// Get screen dimensions
+const { width, height } = Dimensions.get('window');
 
-interface SectionHeaderProps {
-  title: string;
-  onSeeAll?: () => void;
-}
+// Colors
+const colors = {
+  primary: '#E50914',
+  background: '#121212',
+  cardBg: '#1E1E1E',
+  text: '#FFFFFF',
+  textSecondary: '#AAAAAA',
+  border: '#333333',
+};
 
-const SectionHeader = ({ title, onSeeAll }: SectionHeaderProps) => (
-  <View style={styles.sectionHeader}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    {onSeeAll && (
-      <TouchableOpacity onPress={onSeeAll}>
-        <Text style={styles.seeAllText}>See All</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
-
-interface SeriesCardProps {
-  series: DramaSeries;
-  onPress: () => void;
-}
-
-const SeriesCard = ({ series, onPress }: SeriesCardProps) => (
-  <TouchableOpacity style={styles.card} onPress={onPress}>
-    <Image
-      source={{ uri: series.coverImage }}
-      style={styles.cardImage}
-      resizeMode="cover"
-    />
-    <View style={styles.cardContent}>
-      <Text style={styles.cardTitle} numberOfLines={1}>
-        {series.title}
-      </Text>
-      <View style={styles.cardMeta}>
-        <Text style={styles.cardGenre}>{series.genre.join(', ')}</Text>
-        {series.isPremium && (
-          <View style={styles.premiumBadge}>
-            <Text style={styles.premiumText}>Premium</Text>
-          </View>
-        )}
-      </View>
-    </View>
-  </TouchableOpacity>
-);
-
-export default function HomeScreen() {
-  const navigation = useNavigation<HomeScreenNavigationProp>();
-  const [refreshing, setRefreshing] = React.useState(false);
-
-  // Fetch all series
-  const {
-    data: allSeries,
-    isLoading,
-    refetch,
-  } = useQuery<DramaSeries[]>(['series'], async () => {
-    const response = await api.get(endpoints.series.all);
-    return response.data;
+const HomeScreen = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Fetch all drama series
+  const { data: allSeries, isLoading, error, refetch } = useQuery({
+    queryKey: ['dramaSeriesList'],
+    queryFn: () => api.get<DramaSeries[]>(endpoints.dramaSeries.all),
   });
-
-  const handleRefresh = async () => {
+  
+  // Handle refresh
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
-  };
-
-  const navigateToSeriesDetails = (seriesId: number) => {
-    navigation.navigate('SeriesDetails', { seriesId });
-  };
-
-  if (isLoading && !refreshing) {
-    return <LoadingScreen />;
-  }
-
-  // Group series by genre
-  const genreGroups = React.useMemo(() => {
+  }, [refetch]);
+  
+  // Create categories from data
+  const categories = React.useMemo(() => {
     if (!allSeries) return {};
     
-    return allSeries.reduce((acc, series) => {
+    // Create categories based on genre
+    const genreCategories = allSeries.reduce((acc, series) => {
       series.genre.forEach(genre => {
-        if (!acc[genre]) {
-          acc[genre] = [];
-        }
+        if (!acc[genre]) acc[genre] = [];
         acc[genre].push(series);
       });
       return acc;
     }, {} as Record<string, DramaSeries[]>);
+    
+    // Add trending and recent categories
+    const trending = [...allSeries].sort((a, b) => b.averageRating - a.averageRating).slice(0, 10);
+    const recent = [...allSeries].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ).slice(0, 10);
+    
+    return {
+      'Trending Now': trending,
+      'Recently Added': recent,
+      ...genreCategories,
+    };
   }, [allSeries]);
-
-  // Get top rated series
-  const topRatedSeries = React.useMemo(() => {
-    if (!allSeries) return [];
-    return [...allSeries]
-      .filter(series => series.averageRating !== null)
-      .sort((a, b) => 
-        (b.averageRating as number) - (a.averageRating as number)
-      )
-      .slice(0, 5);
-  }, [allSeries]);
-
+  
+  // Navigate to drama series details
+  const navigateToSeriesDetails = (seriesId: number) => {
+    navigation.navigate('SeriesDetails', { seriesId });
+  };
+  
+  if (isLoading && !refreshing) {
+    return <LoadingScreen message="Loading content..." />;
+  }
+  
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>
+          Error loading content. Please try again.
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Short Drama Verse</Text>
-      </View>
-
+      <StatusBar style="light" />
       <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
+        style={styles.scrollView}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Featured Section */}
+        {/* Featured Content */}
         {allSeries && allSeries.length > 0 && (
-          <View style={styles.featuredSection}>
+          <View style={styles.featuredContainer}>
             <Image
               source={{ uri: allSeries[0].coverImage }}
               style={styles.featuredImage}
+              resizeMode="cover"
             />
-            <View style={styles.featuredInfo}>
+            <View style={styles.featuredOverlay}>
               <Text style={styles.featuredTitle}>{allSeries[0].title}</Text>
               <Text style={styles.featuredDescription} numberOfLines={2}>
                 {allSeries[0].description}
@@ -152,179 +129,113 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
-
-        {/* Top Rated Series */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Top Rated"
-            onSeeAll={() => {
-              // Navigate to all top rated
-            }}
-          />
-          <FlatList
-            data={topRatedSeries}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <SeriesCard
-                series={item}
-                onPress={() => navigateToSeriesDetails(item.id)}
-              />
-            )}
-          />
-        </View>
-
-        {/* Series by Genre */}
-        {Object.entries(genreGroups).map(([genre, series]) => (
-          <View key={genre} style={styles.section}>
-            <SectionHeader
-              title={genre}
-              onSeeAll={() => {
-                // Navigate to genre-specific page
-              }}
-            />
+        
+        {/* Categories */}
+        {Object.entries(categories).map(([title, seriesList], index) => (
+          <View key={index} style={styles.categoryContainer}>
+            <Text style={styles.categoryTitle}>{title}</Text>
             <FlatList
-              data={series.slice(0, 5)}
+              data={seriesList}
+              keyExtractor={(item) => item.id.toString()}
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.listContent}
               renderItem={({ item }) => (
-                <SeriesCard
+                <DramaCard
                   series={item}
                   onPress={() => navigateToSeriesDetails(item.id)}
                 />
               )}
+              contentContainerStyle={styles.dramaCardList}
             />
           </View>
         ))}
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
+    paddingTop: RNStatusBar.currentHeight,
   },
-  header: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  scrollView: {
+    flex: 1,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FF5A5F',
-  },
-  featuredSection: {
-    marginBottom: 20,
+  featuredContainer: {
+    width: width,
+    height: height * 0.5,
+    position: 'relative',
   },
   featuredImage: {
     width: '100%',
-    height: 200,
+    height: '100%',
   },
-  featuredInfo: {
-    padding: 15,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  featuredOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   featuredTitle: {
-    fontSize: 18,
+    color: colors.text,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   featuredDescription: {
+    color: colors.textSecondary,
     fontSize: 14,
-    color: '#ddd',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   watchButton: {
-    backgroundColor: '#FF5A5F',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     borderRadius: 5,
     alignSelf: 'flex-start',
-  },
-  watchButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 15,
     marginBottom: 10,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  seeAllText: {
-    color: '#FF5A5F',
+  watchButtonText: {
+    color: colors.text,
     fontSize: 14,
+    fontWeight: 'bold',
   },
-  listContent: {
+  categoryContainer: {
+    marginTop: 20,
     paddingHorizontal: 10,
   },
-  card: {
-    width: 150,
-    marginHorizontal: 5,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+  categoryTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    marginLeft: 10,
   },
-  cardImage: {
-    width: '100%',
-    height: 200,
+  dramaCardList: {
+    paddingLeft: 10,
   },
-  cardContent: {
-    padding: 10,
+  errorText: {
+    color: colors.text,
+    fontSize: 16,
+    textAlign: 'center',
+    margin: 20,
   },
-  cardTitle: {
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    alignSelf: 'center',
+  },
+  retryButtonText: {
+    color: colors.text,
     fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 5,
-    color: '#333',
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardGenre: {
-    fontSize: 12,
-    color: '#666',
-  },
-  premiumBadge: {
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 3,
-  },
-  premiumText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#333',
   },
 });
+
+export default HomeScreen;

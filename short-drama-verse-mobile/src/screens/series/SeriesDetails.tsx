@@ -1,172 +1,196 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
+  Image,
   TouchableOpacity,
   FlatList,
   Dimensions,
+  ActivityIndicator,
+  Platform,
+  StatusBar as RNStatusBar,
+  Alert,
 } from 'react-native';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '@/navigation/RootNavigator';
-import { Ionicons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, endpoints } from '@/services/api';
-import { DramaSeries, Episode, Rating } from '@/types/drama';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/types/drama';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import api, { endpoints } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
-import { LoadingScreen } from '@/screens/common/LoadingScreen';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import LoadingScreen from '@/screens/common/LoadingScreen';
+import { DramaSeries, Episode } from '@/types/drama';
+import { queryClient } from '@/lib/queryClient';
 
-type SeriesDetailsRouteProp = RouteProp<RootStackParamList, 'SeriesDetails'>;
-type SeriesDetailsNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+// Get screen dimensions
+const { width, height } = Dimensions.get('window');
 
-// Episode card component
-interface EpisodeCardProps {
-  episode: Episode;
-  onPress: () => void;
-}
+// Colors
+const colors = {
+  primary: '#E50914',
+  background: '#121212',
+  cardBg: '#1E1E1E',
+  text: '#FFFFFF',
+  textSecondary: '#AAAAAA',
+  inactive: '#555555',
+  rating: '#FFD700',
+  premium: '#FFD700',
+  gradient: ['rgba(18, 18, 18, 0)', 'rgba(18, 18, 18, 0.8)', 'rgba(18, 18, 18, 1)'],
+};
 
-const EpisodeCard = ({ episode, onPress }: EpisodeCardProps) => (
-  <TouchableOpacity style={styles.episodeCard} onPress={onPress}>
-    <Image
-      source={{ uri: episode.thumbnailImage }}
-      style={styles.episodeThumbnail}
-    />
-    <View style={styles.episodeInfo}>
-      <Text style={styles.episodeTitle}>
-        {episode.episodeNumber}. {episode.title}
-      </Text>
-      <Text style={styles.episodeDuration}>{Math.floor(episode.duration / 60)} min</Text>
-      {episode.isPremium && (
-        <View style={styles.premiumBadge}>
-          <Text style={styles.premiumText}>Premium</Text>
-        </View>
-      )}
-    </View>
-    <Ionicons name="play-circle-outline" size={24} color="#FF5A5F" />
-  </TouchableOpacity>
-);
+// Types
+type SeriesDetailsScreenProps = NativeStackScreenProps<RootStackParamList, 'SeriesDetails'>;
 
-export default function SeriesDetails() {
-  const route = useRoute<SeriesDetailsRouteProp>();
-  const navigation = useNavigation<SeriesDetailsNavigationProp>();
+const SeriesDetailsScreen = ({ route, navigation }: SeriesDetailsScreenProps) => {
   const { seriesId } = route.params;
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-
-  // Get series details
-  const { data: series, isLoading: isLoadingSeries } = useQuery<DramaSeries>(
-    ['series', seriesId],
-    async () => {
-      const response = await api.get(endpoints.series.byId(seriesId));
-      return response.data;
-    }
-  );
-
-  // Get episodes
-  const { data: episodes, isLoading: isLoadingEpisodes } = useQuery<Episode[]>(
-    ['episodes', seriesId],
-    async () => {
-      const response = await api.get(endpoints.episodes.bySeries(seriesId));
-      return response.data;
-    }
-  );
-
-  // Get ratings
-  const { data: ratings, isLoading: isLoadingRatings } = useQuery<Rating[]>(
-    ['ratings', seriesId],
-    async () => {
-      const response = await api.get(endpoints.ratings.bySeries(seriesId));
-      return response.data;
-    }
-  );
-
+  const [activeTab, setActiveTab] = useState('episodes');
+  
+  // Fetch series details
+  const { 
+    data: series, 
+    isLoading: isLoadingSeries, 
+    error: seriesError,
+    refetch: refetchSeries,
+  } = useQuery({
+    queryKey: ['dramaSeries', seriesId],
+    queryFn: () => api.get<DramaSeries>(`${endpoints.dramaSeries.byId}/${seriesId}`),
+  });
+  
+  // Fetch episodes
+  const { 
+    data: episodes, 
+    isLoading: isLoadingEpisodes, 
+    error: episodesError,
+    refetch: refetchEpisodes,
+  } = useQuery({
+    queryKey: ['episodes', seriesId],
+    queryFn: () => api.get<Episode[]>(`${endpoints.episodes.bySeries}/${seriesId}`),
+    enabled: !!series,
+  });
+  
   // Check if series is in watchlist
-  const { data: isInWatchlist, isLoading: isLoadingWatchlist } = useQuery<boolean>(
-    ['watchlist', seriesId],
-    async () => {
-      if (!user) return false;
-      const response = await api.get(`${endpoints.watchlist.get}/check/${seriesId}`);
-      return response.data.inWatchlist;
-    },
-    {
-      enabled: !!user,
-    }
-  );
-
+  const { 
+    data: isInWatchlist, 
+    isLoading: isLoadingWatchlist, 
+  } = useQuery({
+    queryKey: ['watchlist', 'check', seriesId],
+    queryFn: () => api.get<boolean>(`${endpoints.watchlist.check}/${seriesId}`),
+    enabled: !!user,
+  });
+  
   // Add to watchlist mutation
-  const addToWatchlistMutation = useMutation(
-    async () => {
-      await api.post(endpoints.watchlist.add, { seriesId });
+  const addToWatchlistMutation = useMutation({
+    mutationFn: (seriesId: number) => 
+      api.post(endpoints.watchlist.add, { userId: user?.id, seriesId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      queryClient.setQueryData(['watchlist', 'check', seriesId], true);
     },
-    {
-      onSuccess: () => {
-        queryClient.setQueryData(['watchlist', seriesId], true);
-      },
-    }
-  );
-
+  });
+  
   // Remove from watchlist mutation
-  const removeFromWatchlistMutation = useMutation(
-    async () => {
-      await api.delete(endpoints.watchlist.remove(seriesId));
+  const removeFromWatchlistMutation = useMutation({
+    mutationFn: (seriesId: number) => 
+      api.post(`${endpoints.watchlist.remove}/${seriesId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      queryClient.setQueryData(['watchlist', 'check', seriesId], false);
     },
-    {
-      onSuccess: () => {
-        queryClient.setQueryData(['watchlist', seriesId], false);
-      },
+  });
+  
+  // Toggle watchlist
+  const toggleWatchlist = () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to add series to your watchlist.');
+      return;
     }
-  );
-
-  const handleWatchlistToggle = () => {
+    
     if (isInWatchlist) {
-      removeFromWatchlistMutation.mutate();
+      removeFromWatchlistMutation.mutate(seriesId);
     } else {
-      addToWatchlistMutation.mutate();
+      addToWatchlistMutation.mutate(seriesId);
     }
   };
-
-  const navigateToEpisode = (episodeId: number) => {
-    navigation.navigate('EpisodePlayer', { episodeId, seriesId });
+  
+  // Play episode
+  const playEpisode = (episode: Episode) => {
+    if (episode.isPremium && !user?.coinBalance) {
+      Alert.alert(
+        'Premium Content',
+        'This episode requires premium access. Please purchase coins to unlock.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Buy Coins', onPress: () => navigation.navigate('UserProfile') },
+        ]
+      );
+      return;
+    }
+    
+    navigation.navigate('EpisodePlayer', { 
+      episodeId: episode.id,
+      seriesId: seriesId,
+    });
   };
-
+  
   if (isLoadingSeries || isLoadingEpisodes) {
-    return <LoadingScreen />;
+    return <LoadingScreen message="Loading series details..." />;
   }
-
-  if (!series || !episodes) {
+  
+  if (seriesError || !series) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Failed to load series details</Text>
+        <Text style={styles.errorText}>Error loading series details.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetchSeries()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
-
+  
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      
       <ScrollView>
-        {/* Series Header */}
-        <View style={styles.header}>
+        {/* Hero Section with Cover Image */}
+        <View style={styles.heroContainer}>
           <Image
             source={{ uri: series.coverImage }}
             style={styles.coverImage}
             resizeMode="cover"
           />
-          
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          
-          <View style={styles.headerOverlay}>
+          <LinearGradient
+            colors={colors.gradient}
+            style={styles.gradient}
+          />
+          <View style={styles.heroContent}>
             <Text style={styles.title}>{series.title}</Text>
+            
+            <View style={styles.metaContainer}>
+              {/* Rating */}
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={16} color={colors.rating} />
+                <Text style={styles.ratingText}>{series.averageRating.toFixed(1)}</Text>
+              </View>
+              
+              {/* Year */}
+              <Text style={styles.metaText}>
+                {new Date(series.releaseDate).getFullYear()}
+              </Text>
+              
+              {/* Premium Badge */}
+              {series.isPremium && (
+                <View style={styles.premiumBadge}>
+                  <Ionicons name="diamond" size={12} color={colors.primary} />
+                  <Text style={styles.premiumText}>PREMIUM</Text>
+                </View>
+              )}
+            </View>
+            
             <View style={styles.genreContainer}>
               {series.genre.map((genre, index) => (
                 <View key={index} style={styles.genreTag}>
@@ -175,210 +199,293 @@ export default function SeriesDetails() {
               ))}
             </View>
             
-            <View style={styles.metaInfo}>
-              <Text style={styles.metaText}>{series.releaseYear}</Text>
-              <Text style={styles.metaText}>Directed by {series.director}</Text>
-              {series.averageRating && (
-                <View style={styles.ratingContainer}>
-                  <Ionicons name="star" size={16} color="#FFD700" />
-                  <Text style={styles.ratingText}>{series.averageRating.toFixed(1)}</Text>
-                </View>
+            {/* Action Buttons */}
+            <View style={styles.actionContainer}>
+              {/* Play Button */}
+              {episodes && episodes.length > 0 && (
+                <TouchableOpacity
+                  style={styles.playButton}
+                  onPress={() => playEpisode(episodes[0])}
+                >
+                  <Ionicons name="play" size={20} color={colors.text} />
+                  <Text style={styles.playButtonText}>Play</Text>
+                </TouchableOpacity>
               )}
+              
+              {/* Watchlist Button */}
+              <TouchableOpacity
+                style={styles.watchlistButton}
+                onPress={toggleWatchlist}
+                disabled={isLoadingWatchlist || addToWatchlistMutation.isPending || removeFromWatchlistMutation.isPending}
+              >
+                <Ionicons
+                  name={isInWatchlist ? "bookmark" : "bookmark-outline"}
+                  size={20}
+                  color={colors.text}
+                />
+                <Text style={styles.watchlistButtonText}>
+                  {isInWatchlist ? "In Watchlist" : "Add to Watchlist"}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
         
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          {episodes.length > 0 && (
-            <TouchableOpacity
-              style={styles.playButton}
-              onPress={() => navigateToEpisode(episodes[0].id)}
-            >
-              <Ionicons name="play" size={20} color="#fff" />
-              <Text style={styles.playButtonText}>Play</Text>
-            </TouchableOpacity>
-          )}
+        {/* Content Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'episodes' && styles.activeTab]}
+            onPress={() => setActiveTab('episodes')}
+          >
+            <Text style={[styles.tabText, activeTab === 'episodes' && styles.activeTabText]}>
+              Episodes
+            </Text>
+          </TouchableOpacity>
           
           <TouchableOpacity
-            style={styles.watchlistButton}
-            onPress={handleWatchlistToggle}
-            disabled={!user || addToWatchlistMutation.isLoading || removeFromWatchlistMutation.isLoading}
+            style={[styles.tab, activeTab === 'details' && styles.activeTab]}
+            onPress={() => setActiveTab('details')}
           >
-            <Ionicons
-              name={isInWatchlist ? "bookmark" : "bookmark-outline"}
-              size={20}
-              color="#333"
-            />
-            <Text style={styles.watchlistButtonText}>
-              {isInWatchlist ? "Remove" : "Add to Watchlist"}
+            <Text style={[styles.tabText, activeTab === 'details' && styles.activeTabText]}>
+              Details
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'related' && styles.activeTab]}
+            onPress={() => setActiveTab('related')}
+          >
+            <Text style={[styles.tabText, activeTab === 'related' && styles.activeTabText]}>
+              Related
             </Text>
           </TouchableOpacity>
         </View>
         
-        {/* Description */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Synopsis</Text>
-          <Text style={styles.description}>{series.description}</Text>
-        </View>
-        
-        {/* Cast */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cast</Text>
-          <View style={styles.castContainer}>
-            {series.actors.map((actor, index) => (
-              <Text key={index} style={styles.castText}>
-                {actor}
-                {index < series.actors.length - 1 ? ", " : ""}
-              </Text>
-            ))}
-          </View>
-        </View>
-        
-        {/* Episodes */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Episodes</Text>
-          {episodes.map((episode) => (
-            <EpisodeCard
-              key={episode.id}
-              episode={episode}
-              onPress={() => navigateToEpisode(episode.id)}
-            />
-          ))}
-        </View>
-        
-        {/* Ratings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ratings & Reviews</Text>
-          {ratings && ratings.length > 0 ? (
-            ratings.map((rating) => (
-              <View key={rating.id} style={styles.reviewCard}>
-                <View style={styles.reviewHeader}>
-                  {rating.user && (
-                    <Text style={styles.reviewerName}>{rating.user.username}</Text>
-                  )}
-                  <View style={styles.reviewRating}>
-                    <Ionicons name="star" size={16} color="#FFD700" />
-                    <Text style={styles.reviewRatingText}>{rating.rating}</Text>
-                  </View>
+        {/* Tab Content */}
+        <View style={styles.contentContainer}>
+          {/* Episodes Tab */}
+          {activeTab === 'episodes' && (
+            <>
+              {episodesError ? (
+                <View style={styles.tabErrorContainer}>
+                  <Text style={styles.errorText}>Error loading episodes.</Text>
+                  <TouchableOpacity style={styles.retryButton} onPress={() => refetchEpisodes()}>
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
                 </View>
-                {rating.comment && (
-                  <Text style={styles.reviewComment}>{rating.comment}</Text>
-                )}
-              </View>
-            ))
-          ) : (
-            <Text style={styles.noReviewsText}>No reviews yet</Text>
+              ) : episodes && episodes.length > 0 ? (
+                <FlatList
+                  data={episodes}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.episodeItem}
+                      onPress={() => playEpisode(item)}
+                    >
+                      {/* Episode Thumbnail */}
+                      <View style={styles.episodeImageContainer}>
+                        <Image
+                          source={{ uri: item.thumbnail || series.coverImage }}
+                          style={styles.episodeThumbnail}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.episodeDuration}>
+                          <Text style={styles.durationText}>
+                            {Math.floor(item.duration / 60)}:{(item.duration % 60).toString().padStart(2, '0')}
+                          </Text>
+                        </View>
+                        
+                        {/* Premium Badge */}
+                        {item.isPremium && (
+                          <View style={styles.episodePremiumBadge}>
+                            <Ionicons name="diamond" size={10} color={colors.background} />
+                            <Text style={styles.episodePremiumText}>PREMIUM</Text>
+                          </View>
+                        )}
+                      </View>
+                      
+                      {/* Episode Info */}
+                      <View style={styles.episodeInfo}>
+                        <Text style={styles.episodeTitle}>
+                          {item.episodeNumber}. {item.title}
+                        </Text>
+                        <Text style={styles.episodeDescription} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      </View>
+                      
+                      {/* Play Icon */}
+                      <Ionicons name="play-circle-outline" size={30} color={colors.text} />
+                    </TouchableOpacity>
+                  )}
+                  scrollEnabled={false}
+                />
+              ) : (
+                <Text style={styles.noContentText}>No episodes available.</Text>
+              )}
+            </>
+          )}
+          
+          {/* Details Tab */}
+          {activeTab === 'details' && (
+            <View style={styles.detailsContainer}>
+              <Text style={styles.sectionTitle}>Synopsis</Text>
+              <Text style={styles.descriptionText}>{series.description}</Text>
+              
+              <Text style={styles.sectionTitle}>Director</Text>
+              <Text style={styles.infoText}>{series.director || 'Not specified'}</Text>
+              
+              <Text style={styles.sectionTitle}>Cast</Text>
+              <Text style={styles.infoText}>{series.cast?.join(', ') || 'Not specified'}</Text>
+              
+              <Text style={styles.sectionTitle}>Release Date</Text>
+              <Text style={styles.infoText}>
+                {new Date(series.releaseDate).toLocaleDateString()}
+              </Text>
+            </View>
+          )}
+          
+          {/* Related Tab */}
+          {activeTab === 'related' && (
+            <View style={styles.relatedContainer}>
+              <Text style={styles.noContentText}>
+                Related content will be available soon.
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>
     </View>
   );
-}
-
-const { width } = Dimensions.get('window');
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: colors.background,
   },
   errorText: {
+    color: colors.text,
     fontSize: 16,
-    color: '#FF5A5F',
     textAlign: 'center',
+    marginBottom: 15,
   },
-  header: {
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: colors.text,
+    fontWeight: 'bold',
+  },
+  heroContainer: {
+    width: width,
+    height: height * 0.6,
     position: 'relative',
-    height: 300,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 40,
-    left: 15,
-    zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 8,
-    borderRadius: 20,
   },
   coverImage: {
     width: '100%',
     height: '100%',
   },
-  headerOverlay: {
+  gradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 15,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    height: '70%',
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
   },
   title: {
-    fontSize: 24,
+    color: colors.text,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
-  },
-  genreContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     marginBottom: 10,
   },
-  genreTag: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 15,
-    marginRight: 5,
-    marginBottom: 5,
-  },
-  genreText: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  metaInfo: {
+  metaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  metaText: {
-    color: '#ddd',
-    fontSize: 14,
-    marginRight: 10,
+    marginBottom: 10,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 15,
   },
   ratingText: {
-    color: '#fff',
+    color: colors.text,
     fontSize: 14,
+    fontWeight: 'bold',
     marginLeft: 5,
   },
-  actionButtons: {
+  metaText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginRight: 15,
+  },
+  premiumBadge: {
     flexDirection: 'row',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    alignItems: 'center',
+    backgroundColor: colors.premium,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  premiumText: {
+    color: colors.background,
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  genreContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 15,
+  },
+  genreTag: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  genreText: {
+    color: colors.text,
+    fontSize: 12,
+  },
+  actionContainer: {
+    flexDirection: 'row',
+    marginBottom: 10,
   },
   playButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FF5A5F',
-    borderRadius: 5,
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 20,
+    borderRadius: 5,
     marginRight: 10,
-    flex: 1,
   },
   playButtonText: {
-    color: '#fff',
+    color: colors.text,
+    fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 5,
   },
@@ -386,113 +493,138 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#eee',
-    borderRadius: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingVertical: 10,
     paddingHorizontal: 20,
-    flex: 1,
-  },
-  watchlistButtonText: {
-    color: '#333',
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
-  section: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#555',
-  },
-  castContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  castText: {
-    fontSize: 15,
-    color: '#555',
-  },
-  episodeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: '#f9f9f9',
-    marginBottom: 10,
-  },
-  episodeThumbnail: {
-    width: 100,
-    height: 60,
     borderRadius: 5,
   },
-  episodeInfo: {
-    flex: 1,
-    paddingHorizontal: 10,
+  watchlistButtonText: {
+    color: colors.text,
+    fontSize: 16,
+    marginLeft: 5,
   },
-  episodeTitle: {
-    fontSize: 14,
+  tabsContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.inactive,
+    marginTop: 10,
+    backgroundColor: colors.background,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 3,
+    borderBottomColor: colors.primary,
+  },
+  tabText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+  },
+  activeTabText: {
+    color: colors.text,
     fontWeight: 'bold',
-    color: '#333',
+  },
+  contentContainer: {
+    padding: 15,
+  },
+  tabErrorContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  episodeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    backgroundColor: colors.cardBg,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  episodeImageContainer: {
+    position: 'relative',
+    width: 120,
+    height: 70,
+  },
+  episodeThumbnail: {
+    width: '100%',
+    height: '100%',
   },
   episodeDuration: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-  },
-  premiumBadge: {
-    backgroundColor: '#FFD700',
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 3,
-    alignSelf: 'flex-start',
-    marginTop: 2,
   },
-  premiumText: {
+  durationText: {
+    color: colors.text,
     fontSize: 10,
-    fontWeight: 'bold',
-    color: '#333',
   },
-  reviewCard: {
-    backgroundColor: '#f9f9f9',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  reviewHeader: {
+  episodePremiumBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: colors.premium,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  episodePremiumText: {
+    color: colors.background,
+    fontSize: 8,
+    fontWeight: 'bold',
+    marginLeft: 2,
+  },
+  episodeInfo: {
+    flex: 1,
+    padding: 10,
+  },
+  episodeTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: 'bold',
     marginBottom: 5,
   },
-  reviewerName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+  episodeDescription: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
   },
-  reviewRating: {
-    flexDirection: 'row',
+  noContentText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  detailsContainer: {
+    padding: 10,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  descriptionText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  infoText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  relatedContainer: {
+    padding: 20,
     alignItems: 'center',
   },
-  reviewRatingText: {
-    marginLeft: 5,
-    color: '#333',
-  },
-  reviewComment: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 20,
-  },
-  noReviewsText: {
-    color: '#777',
-    fontStyle: 'italic',
-  },
 });
+
+export default SeriesDetailsScreen;

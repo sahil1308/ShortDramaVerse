@@ -9,148 +9,184 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  TouchableWithoutFeedback,
-  Keyboard,
-  ActivityIndicator,
   Alert,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/types/drama';
 import { useAuth } from '@/hooks/useAuth';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 
-type SignInScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'SignIn'>;
+// Get screen dimensions
+const { width, height } = Dimensions.get('window');
 
-/**
- * SignIn Screen
- * Handles user authentication and navigation to register screen
- */
-const SignIn: React.FC = () => {
-  const navigation = useNavigation<SignInScreenNavigationProp>();
-  const { login, loginLoading, isAuthenticated, error, clearError } = useAuth();
+// Colors
+const colors = {
+  primary: '#E50914',
+  background: '#121212',
+  inputBg: '#333333',
+  text: '#FFFFFF',
+  textSecondary: '#AAAAAA',
+  border: '#444444',
+  error: '#FF5252',
+};
+
+interface FormData {
+  username: string;
+  password: string;
+}
+
+const SignInScreen = () => {
+  // Navigation
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  // Auth hook
+  const { loginMutation, isLoading } = useAuth();
   
-  // Clear errors when input changes
-  useEffect(() => {
-    if (username) setUsernameError(null);
-    if (password) setPasswordError(null);
-    if (error) clearError();
-  }, [username, password, error, clearError]);
+  // Form state
+  const [formData, setFormData] = useState<FormData>({
+    username: '',
+    password: '',
+  });
   
-  // Redirect to home if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigation.replace('MainTabs');
+  // Error state
+  const [errors, setErrors] = useState<Partial<FormData>>({});
+  
+  // Password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Handle input change
+  const handleInputChange = (field: keyof FormData, value: string) => {
+    setFormData({ ...formData, [field]: value });
+    // Clear error when user types
+    if (errors[field]) {
+      setErrors({ ...errors, [field]: undefined });
     }
-  }, [isAuthenticated, navigation]);
+  };
   
-  // Validate form before submission
+  // Validate form
   const validateForm = (): boolean => {
-    let isValid = true;
+    const newErrors: Partial<FormData> = {};
     
-    if (!username.trim()) {
-      setUsernameError('Username is required');
-      isValid = false;
+    if (!formData.username.trim()) {
+      newErrors.username = 'Username is required';
     }
     
-    if (!password) {
-      setPasswordError('Password is required');
-      isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
-      isValid = false;
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     }
     
-    return isValid;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
   
-  // Handle login attempt
-  const handleLogin = async () => {
-    if (validateForm()) {
-      Keyboard.dismiss();
-      try {
-        await login(username, password);
-      } catch (err) {
-        Alert.alert('Login Failed', 'Failed to login. Please try again.');
-      }
+  // Handle sign in
+  const handleSignIn = async () => {
+    if (!validateForm()) return;
+    
+    try {
+      await loginMutation.mutateAsync({
+        username: formData.username,
+        password: formData.password,
+      });
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message || 'Could not sign in. Please try again.');
     }
   };
   
-  // Navigate to sign up screen
+  // Navigate to sign up
   const navigateToSignUp = () => {
     navigation.navigate('SignUp');
   };
   
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <StatusBar style="light" />
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          <View style={styles.header}>
-            <Text style={styles.logo}>ShortDramaVerse</Text>
-            <Text style={styles.tagline}>Your pocket drama companion</Text>
-          </View>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {/* Logo and Header */}
+        <View style={styles.headerContainer}>
+          <Text style={styles.logoText}>ShortDramaVerse</Text>
+          <Text style={styles.tagline}>Stream exclusive short-form drama content</Text>
+        </View>
+        
+        {/* Form */}
+        <View style={styles.formContainer}>
+          <Text style={styles.formTitle}>Sign In</Text>
           
-          <View style={styles.formContainer}>
-            <Text style={styles.title}>Sign In</Text>
-            
-            {error && <Text style={styles.errorMessage}>{error}</Text>}
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Username</Text>
-              <TextInput
-                style={[styles.input, usernameError && styles.inputError]}
-                placeholder="Enter your username"
-                placeholderTextColor="#6c757d"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-              />
-              {usernameError && <Text style={styles.errorText}>{usernameError}</Text>}
-            </View>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={[styles.input, passwordError && styles.inputError]}
-                placeholder="Enter your password"
-                placeholderTextColor="#6c757d"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
-              {passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.loginButton} 
-              onPress={handleLogin}
-              disabled={loginLoading}
-            >
-              {loginLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-            
-            <View style={styles.signupContainer}>
-              <Text style={styles.signupText}>Don't have an account?</Text>
-              <TouchableOpacity onPress={navigateToSignUp}>
-                <Text style={styles.signupLink}>Sign Up</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Username input */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Username"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.username}
+              onChangeText={(text) => handleInputChange('username', text)}
+              autoCapitalize="none"
+            />
           </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+          {errors.username ? (
+            <Text style={styles.errorText}>{errors.username}</Text>
+          ) : null}
+          
+          {/* Password input */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.password}
+              onChangeText={(text) => handleInputChange('password', text)}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={styles.visibilityToggle}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+          {errors.password ? (
+            <Text style={styles.errorText}>{errors.password}</Text>
+          ) : null}
+          
+          {/* Sign In Button */}
+          <TouchableOpacity
+            style={[styles.button, isLoading && styles.buttonDisabled]}
+            onPress={handleSignIn}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color={colors.text} size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Sign In</Text>
+            )}
+          </TouchableOpacity>
+          
+          {/* Sign Up Link */}
+          <View style={styles.signUpContainer}>
+            <Text style={styles.signUpText}>Don't have an account?</Text>
+            <TouchableOpacity onPress={navigateToSignUp}>
+              <Text style={styles.signUpLink}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -158,104 +194,97 @@ const SignIn: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0C10',
+    backgroundColor: colors.background,
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
   },
-  header: {
+  headerContainer: {
     alignItems: 'center',
     marginBottom: 40,
   },
-  logo: {
-    fontSize: 28,
+  logoText: {
+    color: colors.primary,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#8E44AD', // Purple theme color
-    marginBottom: 8,
+    marginBottom: 10,
+    textAlign: 'center',
   },
   tagline: {
+    color: colors.textSecondary,
     fontSize: 16,
-    color: '#C5C6C7',
     textAlign: 'center',
   },
   formContainer: {
-    backgroundColor: '#1F2833',
-    borderRadius: 10,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
-  title: {
+  formTitle: {
+    color: colors.text,
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFFF',
     marginBottom: 20,
-    textAlign: 'center',
-  },
-  errorMessage: {
-    color: '#FF5252',
-    backgroundColor: 'rgba(255, 82, 82, 0.1)',
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 15,
-    textAlign: 'center',
   },
   inputContainer: {
-    marginBottom: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.inputBg,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  label: {
-    fontSize: 14,
-    marginBottom: 5,
-    color: '#C5C6C7',
+  inputIcon: {
+    paddingHorizontal: 10,
   },
   input: {
-    backgroundColor: '#2C3541',
-    height: 50,
-    borderRadius: 5,
-    paddingHorizontal: 15,
-    color: '#FFFFFF',
+    flex: 1,
+    color: colors.text,
+    padding: 15,
     fontSize: 16,
   },
-  inputError: {
-    borderWidth: 1,
-    borderColor: '#FF5252',
+  visibilityToggle: {
+    padding: 10,
   },
   errorText: {
-    color: '#FF5252',
-    fontSize: 12,
-    marginTop: 5,
+    color: colors.error,
+    fontSize: 14,
+    marginBottom: 12,
+    marginTop: -8,
   },
-  loginButton: {
-    backgroundColor: '#8E44AD',
-    height: 50,
-    borderRadius: 5,
-    justifyContent: 'center',
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 15,
     alignItems: 'center',
     marginTop: 10,
   },
-  loginButtonText: {
-    color: '#FFFFFF',
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: 'bold',
   },
-  signupContainer: {
+  signUpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 20,
   },
-  signupText: {
-    color: '#C5C6C7',
-    marginRight: 5,
+  signUpText: {
+    color: colors.textSecondary,
+    fontSize: 16,
   },
-  signupLink: {
-    color: '#8E44AD',
+  signUpLink: {
+    color: colors.primary,
+    fontSize: 16,
     fontWeight: 'bold',
+    marginLeft: 5,
   },
 });
 
-export default SignIn;
+export default SignInScreen;

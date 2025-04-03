@@ -1,115 +1,90 @@
-import React from 'react';
-import { 
-  QueryClient, 
-  QueryClientProvider, 
-  useQuery,
-  useMutation,
-  UseQueryOptions,
-  UseMutationOptions,
-  QueryKey,
-} from '@tanstack/react-query';
-import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios, { AxiosError } from 'axios';
+import { QueryClient } from '@tanstack/react-query';
+import { QueryCache, MutationCache } from '@tanstack/react-query';
 import api from '@/services/api';
+import { ApiError } from '@/types/drama';
+import { getToken } from '@/services/storage';
 
-// Create a client
+// Options for apiRequest
+interface ApiRequestOptions {
+  authRequired?: boolean;
+  headers?: Record<string, string>;
+}
+
+// Create a new queryClient
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
       staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 60, // 1 hour
+      cacheTime: 1000 * 60 * 30, // 30 minutes
       refetchOnWindowFocus: false,
       refetchOnMount: true,
+      refetchOnReconnect: true,
+      retry: 1,
     },
   },
+  queryCache: new QueryCache({
+    onError: (error) => {
+      console.error('Query error:', error);
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      console.error('Mutation error:', error);
+    },
+  }),
 });
 
-// Error handler
-export function handleError(error: any) {
-  if (error.status === 401) {
-    // Unauthorized - trigger logout or redirect to login
-    return;
-  }
-
-  // Display user-friendly error message
-  const errorMessage = error.message || 'An unexpected error occurred';
-  Alert.alert('Error', errorMessage);
-}
-
-/**
- * Default query function for data fetching
- * Handles authentication and error handling
- */
-export const defaultQueryFn = async ({ queryKey }: { queryKey: string[] }) => {
+// Helper function to make API requests
+export async function apiRequest<T>(
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  endpoint: string,
+  data?: any,
+  options: ApiRequestOptions = {}
+): Promise<T> {
   try {
-    // Use the first element of the query key as the endpoint
-    const endpoint = queryKey[0];
+    if (method === 'GET') {
+      return await api.get<T>(endpoint, options);
+    } else if (method === 'POST') {
+      return await api.post<T>(endpoint, data, options);
+    } else if (method === 'PUT') {
+      return await api.put<T>(endpoint, data, options);
+    } else if (method === 'DELETE') {
+      return await api.delete<T>(endpoint, options);
+    }
     
-    // Get additional params from the rest of the queryKey if needed
-    const response = await api.request('GET', endpoint);
-    return response;
+    throw new Error(`Unsupported method: ${method}`);
   } catch (error) {
-    handleError(error);
+    console.error(`API ${method} request failed for ${endpoint}:`, error);
     throw error;
   }
+}
+
+// Interface for default query function options
+export interface QueryFnOptions {
+  on401?: 'throw' | 'returnNull';
+}
+
+// Default query function
+export const getQueryFn = (options: QueryFnOptions = {}) => {
+  return async function queryFn<T>({ queryKey }: { queryKey: string[] }): Promise<T | null> {
+    const endpoint = Array.isArray(queryKey) ? queryKey[0] : queryKey;
+    
+    try {
+      return await api.get<T>(endpoint);
+    } catch (error) {
+      const apiError = error as ApiError;
+      
+      // Handle unauthorized errors
+      if (apiError.status === 401 && options.on401 === 'returnNull') {
+        return null;
+      }
+      
+      throw error;
+    }
+  };
 };
 
-/**
- * Helper function for handling API errors
- */
-export function formatApiError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError;
-    if (axiosError.response) {
-      const data = axiosError.response.data as any;
-      return data.message || 'Server error';
-    }
-    if (axiosError.request) {
-      return 'Network error. Please check your connection.';
-    }
-  }
-  return 'An unexpected error occurred';
-}
-
-/**
- * Custom hook for querying with automatic error handling
- */
-export function useSafeQuery<TData = unknown, TError = Error>(
-  options: UseQueryOptions<TData, TError, TData, any>
-) {
-  return useQuery<TData, TError>({
-    ...options,
-    onError: (error) => {
-      handleError(error);
-      if (options.onError) {
-        options.onError(error);
-      }
-    },
-  });
-}
-
-/**
- * Custom hook for mutations with automatic error handling
- */
-export function useSafeMutation<TData = unknown, TError = Error, TVariables = void, TContext = unknown>(
-  options: UseMutationOptions<TData, TError, TVariables, TContext>
-) {
-  return useMutation<TData, TError, TVariables, TContext>({
-    ...options,
-    onError: (error, variables, context) => {
-      handleError(error);
-      if (options.onError) {
-        options.onError(error, variables, context);
-      }
-    },
-  });
-}
-
-/**
- * React Query Provider component
- */
+// React Query Provider component
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -117,3 +92,6 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   );
 }
+
+// Import this at the top of the file after all imports
+import { QueryClientProvider } from '@tanstack/react-query';

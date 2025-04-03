@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '@/hooks/useAuth';
 import MainTabs from './MainTabs';
@@ -10,66 +10,91 @@ import EpisodePlayerScreen from '@/screens/series/EpisodePlayer';
 import UserProfileScreen from '@/screens/profile/UserProfile';
 import { RootStackParamList } from '@/types/drama';
 
-// Create the stack navigator
+// Create the navigation stack
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-/**
- * Root navigator component that handles the application navigation structure
- * including authentication flow and main content
- */
-const RootNavigator: React.FC = () => {
-  const { isLoading, isAuthenticated } = useAuth();
-
-  // If auth is still loading, show loading screen
-  if (isLoading) {
-    return <LoadingScreen message="Starting ShortDramaVerse..." />;
+// Root Navigator Component
+const RootNavigator = () => {
+  const { user, isLoading } = useAuth();
+  const [initializing, setInitializing] = useState(true);
+  
+  // Add a slight delay to prevent flash of loading state
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setInitializing(false);
+    }, 1500);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  if (isLoading || initializing) {
+    return <LoadingScreen message="Starting up..." />;
   }
-
+  
   return (
-    <Stack.Navigator
+    <Stack.Navigator 
       screenOptions={{
         headerShown: false,
+        contentStyle: { backgroundColor: '#121212' },
+        animation: 'slide_from_right',
       }}
     >
-      {/* Conditionally render auth screens or main app screens based on auth state */}
-      {!isAuthenticated ? (
-        // Auth flow
-        <>
-          <Stack.Screen
-            name="SignIn"
-            component={SignInScreen}
-            options={{ title: 'Sign In' }}
-          />
-          <Stack.Screen
-            name="SignUp"
-            component={SignUpScreen}
-            options={{ title: 'Sign Up' }}
-          />
-        </>
+      {!user ? (
+        // Auth screens
+        <Stack.Group>
+          <Stack.Screen name="SignIn" component={SignInScreen} />
+          <Stack.Screen name="SignUp" component={SignUpScreen} />
+        </Stack.Group>
       ) : (
-        // Main app flow
+        // App screens
         <>
-          <Stack.Screen name="MainTabs" component={MainTabs} />
-          <Stack.Screen
-            name="SeriesDetails"
+          <Stack.Screen 
+            name="MainTabs" 
+            component={MainTabs} 
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen 
+            name="SeriesDetails" 
             component={SeriesDetailsScreen}
-            options={{ headerShown: true, title: '' }}
+            options={{
+              headerShown: true,
+              headerTransparent: true,
+              headerTitle: '',
+              headerBackTitleVisible: false,
+            }}
           />
-          <Stack.Screen
-            name="EpisodePlayer"
+          
+          <Stack.Screen 
+            name="EpisodePlayer" 
             component={EpisodePlayerScreen}
-            options={{ headerShown: true, title: '' }}
+            options={{
+              headerShown: false,
+              animation: 'fade',
+              orientation: 'landscape',
+            }}
           />
-          <Stack.Screen
-            name="UserProfile"
+          
+          <Stack.Screen 
+            name="UserProfile" 
             component={UserProfileScreen}
-            options={{ headerShown: true, title: 'Profile' }}
+            options={{
+              headerShown: true,
+              headerTitle: 'Profile',
+              headerBackTitleVisible: false,
+            }}
+          />
+          
+          <Stack.Screen 
+            name="LoadingScreen" 
+            component={LoadingScreen} 
+            options={{ 
+              headerShown: false,
+              animation: 'fade',
+            }}
           />
         </>
       )}
-      
-      {/* Common screens */}
-      <Stack.Screen name="LoadingScreen" component={LoadingScreen} />
     </Stack.Navigator>
   );
 };
