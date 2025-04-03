@@ -1,215 +1,217 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
-import { Alert } from 'react-native';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
-
-import { User, AuthCredentials, RegisterCredentials } from '@/types/drama';
-import api from '@/services/api';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { 
+  User, 
+  AuthCredentials, 
+  RegisterCredentials, 
+  RootStackParamList 
+} from '@/types/drama';
+import { apiRequest } from '@/lib/queryClient';
 import { endpoints } from '@/services/api';
 
-// Create context type
+// Keys for AsyncStorage
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
+
+// Auth context type definition
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  isInitialized: boolean;
   error: string | null;
-  login: (credentials: AuthCredentials) => Promise<User>;
-  register: (credentials: RegisterCredentials) => Promise<User>;
+  login: (credentials: AuthCredentials) => Promise<void>;
+  register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (userData: Partial<User>) => Promise<User>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
+  clearError: () => void;
 }
 
-// Create the context
-const AuthContext = createContext<AuthContextType | null>(null);
+// Create context with default values
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  isLoading: false,
+  isInitialized: false,
+  error: null,
+  login: async () => {},
+  register: async () => {},
+  logout: async () => {},
+  updateProfile: async () => {},
+  clearError: () => {},
+});
 
-// Auth provider props
-interface AuthProviderProps {
-  children: ReactNode;
-}
+// Custom hook to use auth context
+export const useAuth = () => useContext(AuthContext);
 
-// Auth provider component
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const queryClient = useQueryClient();
 
-  // Check if user is already logged in
+  // Initialize auth state from AsyncStorage
   useEffect(() => {
-    const loadUser = async () => {
+    const initialize = async () => {
       try {
-        const token = await AsyncStorage.getItem('auth_token');
-        
-        if (token) {
-          // Verify token with the server
-          const userData = await fetchCurrentUser();
-          if (userData) {
-            setUser(userData);
-          }
+        const storedUser = await AsyncStorage.getItem(USER_KEY);
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
         }
       } catch (error) {
-        console.error('Error loading user:', error);
+        console.error('Error initializing auth:', error);
       } finally {
-        setIsLoading(false);
+        setIsInitialized(true);
       }
     };
-    
-    loadUser();
+
+    initialize();
   }, []);
 
-  // Fetch current user from API
-  const fetchCurrentUser = async (): Promise<User | null> => {
-    try {
-      const response = await api.get(endpoints.auth.user);
-      return response.data;
-    } catch (error) {
-      // Clear stored token if unauthorized
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        await AsyncStorage.removeItem('auth_token');
-      }
-      return null;
-    }
+  // Save user to AsyncStorage
+  const saveUserToStorage = async (user: User) => {
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+    setUser(user);
   };
 
-  // Login user
-  const login = async (credentials: AuthCredentials): Promise<User> => {
+  // Save token to AsyncStorage
+  const saveTokenToStorage = async (token: string) => {
+    await AsyncStorage.setItem(TOKEN_KEY, token);
+  };
+
+  // Clear auth data from AsyncStorage
+  const clearAuthData = async () => {
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(USER_KEY);
+    setUser(null);
+  };
+
+  // Login function
+  const login = async (credentials: AuthCredentials) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.post(endpoints.auth.login, credentials);
-      const userData = response.data;
+      const response = await apiRequest<{user: User; token: string}>('POST', endpoints.auth.login, credentials);
       
-      // Store user data and token
-      setUser(userData);
-      await AsyncStorage.setItem('auth_token', userData.token);
+      await saveTokenToStorage(response.token);
+      await saveUserToStorage(response.user);
       
-      // Invalidate queries that might depend on auth status
-      queryClient.invalidateQueries({ queryKey: [endpoints.auth.user] });
-      
-      return userData;
-    } catch (error) {
-      // Handle login error
-      const errorMessage = 
-        axios.isAxiosError(error) && error.response?.data?.message
-          ? error.response.data.message
-          : 'Login failed. Please check your credentials and try again.';
-      
-      setError(errorMessage);
-      Alert.alert('Login Failed', errorMessage);
-      throw new Error(errorMessage);
+      // Navigate to main screen after successful login
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    } catch (error: any) {
+      setError(error.message || 'Failed to login. Please try again.');
+      Alert.alert('Login Failed', error.message || 'Failed to login. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Register user
-  const register = async (credentials: RegisterCredentials): Promise<User> => {
+  // Register function
+  const register = async (credentials: RegisterCredentials) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.post(endpoints.auth.register, credentials);
-      const userData = response.data;
+      const response = await apiRequest<{user: User; token: string}>('POST', endpoints.auth.register, credentials);
       
-      // Store user data and token
-      setUser(userData);
-      await AsyncStorage.setItem('auth_token', userData.token);
+      await saveTokenToStorage(response.token);
+      await saveUserToStorage(response.user);
       
-      // Invalidate queries that might depend on auth status
-      queryClient.invalidateQueries({ queryKey: [endpoints.auth.user] });
-      
-      return userData;
-    } catch (error) {
-      // Handle registration error
-      const errorMessage = 
-        axios.isAxiosError(error) && error.response?.data?.message
-          ? error.response.data.message
-          : 'Registration failed. Please try again with different credentials.';
-      
-      setError(errorMessage);
-      Alert.alert('Registration Failed', errorMessage);
-      throw new Error(errorMessage);
+      // Navigate to main screen after successful registration
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    } catch (error: any) {
+      setError(error.message || 'Failed to register. Please try again.');
+      Alert.alert('Registration Failed', error.message || 'Failed to register. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Logout user
-  const logout = async (): Promise<void> => {
+  // Logout function
+  const logout = async () => {
     setIsLoading(true);
     
     try {
-      await api.post(endpoints.auth.logout);
-    } catch (error) {
-      console.error('Error during logout:', error);
-    } finally {
-      // Clear user data and token regardless of API response
-      setUser(null);
-      await AsyncStorage.removeItem('auth_token');
+      await apiRequest('POST', endpoints.auth.logout);
       
-      // Clear any user-related queries from the cache
+      // Clear local state and storage
+      await clearAuthData();
+      
+      // Clear all queries from cache
       queryClient.clear();
       
+      // Navigate to auth screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'AuthStack' }],
+      });
+    } catch (error: any) {
+      console.error('Logout error:', error);
+      // Even if API logout fails, we clear local data
+      await clearAuthData();
+      
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'AuthStack' }],
+      });
+    } finally {
       setIsLoading(false);
     }
   };
 
   // Update user profile
-  const updateProfile = async (userData: Partial<User>): Promise<User> => {
+  const updateProfile = async (data: Partial<User>) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.put(endpoints.user.updateProfile, userData);
-      const updatedUser = response.data;
+      const updatedUser = await apiRequest<User>('PATCH', endpoints.user.updateProfile, data);
+      await saveUserToStorage(updatedUser);
       
-      // Update local user state
-      setUser(prevUser => prevUser ? { ...prevUser, ...updatedUser } : updatedUser);
+      // Invalidate user-related queries
+      queryClient.invalidateQueries({ queryKey: ['auth-user'] });
       
-      // Invalidate user queries
-      queryClient.invalidateQueries({ queryKey: [endpoints.auth.user] });
-      
-      return updatedUser;
-    } catch (error) {
-      // Handle update error
-      const errorMessage = 
-        axios.isAxiosError(error) && error.response?.data?.message
-          ? error.response.data.message
-          : 'Failed to update profile. Please try again.';
-      
-      setError(errorMessage);
-      Alert.alert('Update Failed', errorMessage);
-      throw new Error(errorMessage);
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (error: any) {
+      setError(error.message || 'Failed to update profile. Please try again.');
+      Alert.alert('Update Failed', error.message || 'Failed to update profile. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Create value object with all auth functions and state
-  const value = {
-    user,
-    isLoading,
-    error,
-    login,
-    register,
-    logout,
-    updateProfile
-  };
+  // Clear error state
+  const clearError = () => setError(null);
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isInitialized,
+        error,
+        login,
+        register,
+        logout,
+        updateProfile,
+        clearError,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Hook to use auth context
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  
-  return context;
-};
+export default AuthProvider;

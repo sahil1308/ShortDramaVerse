@@ -1,99 +1,104 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MaterialIcons } from '@expo/vector-icons';
-import { StyleSheet, View, Text } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { StyleSheet, Platform } from 'react-native';
+import { MainTabParamList } from '@/types/drama';
 
-// Import the screens for each tab
+// Import screens
 import HomeScreen from '@/screens/home/HomeScreen';
 import SearchScreen from '@/screens/search/SearchScreen';
 import WatchlistScreen from '@/screens/watchlist/WatchlistScreen';
 import ProfileScreen from '@/screens/profile/ProfileScreen';
 
-// Create the tab navigator
-const Tab = createBottomTabNavigator();
+// Create bottom tabs navigator
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
-export default function MainTabs() {
+/**
+ * Main tabs navigator component
+ * Provides navigation between main app screens
+ */
+const MainTabs: React.FC = () => {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: styles.tabBar,
-        tabBarShowLabel: true,
-        tabBarActiveTintColor: '#FE3E69',
-        tabBarInactiveTintColor: '#888888',
         headerShown: false,
+        tabBarActiveTintColor: '#E50914',
+        tabBarInactiveTintColor: '#8E8E8E',
+        tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
-      <Tab.Screen 
-        name="Home" 
-        component={HomeScreen} 
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="home" color={color} size={size} />
+            <Ionicons name="home" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={[styles.tabLabel, { color }]}>Home</Text>
+            <TabLabel label="Home" color={color} />
           ),
         }}
       />
-      
-      <Tab.Screen 
-        name="Search" 
+      <Tab.Screen
+        name="Search"
         component={SearchScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="search" color={color} size={size} />
+            <Ionicons name="search" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={[styles.tabLabel, { color }]}>Search</Text>
+            <TabLabel label="Search" color={color} />
           ),
         }}
       />
-      
-      <Tab.Screen 
-        name="Watchlist" 
+      <Tab.Screen
+        name="Watchlist"
         component={WatchlistScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="bookmarks" color={color} size={size} />
+            <MaterialIcons name="playlist-play" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={[styles.tabLabel, { color }]}>Watchlist</Text>
+            <TabLabel label="Watchlist" color={color} />
           ),
         }}
       />
-      
-      <Tab.Screen 
-        name="Profile" 
+      <Tab.Screen
+        name="Profile"
         component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="person" color={color} size={size} />
+            <Ionicons name="person" size={size} color={color} />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={[styles.tabLabel, { color }]}>Profile</Text>
+            <TabLabel label="Profile" color={color} />
           ),
         }}
       />
     </Tab.Navigator>
   );
-}
+};
+
+/**
+ * Custom tab label component
+ */
+const TabLabel: React.FC<{ label: string; color: string }> = ({ label, color }) => (
+  <React.Fragment>{label}</React.Fragment>
+);
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#0A0A0A',
     borderTopWidth: 0,
-    paddingTop: 10,
-    paddingBottom: 10,
-    height: 60,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    elevation: 0,
+    height: Platform.OS === 'ios' ? 85 : 65,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
   },
-  tabLabel: {
+  tabBarLabel: {
     fontSize: 12,
     fontWeight: '500',
-    marginBottom: 5,
   },
 });
+
+export default MainTabs;

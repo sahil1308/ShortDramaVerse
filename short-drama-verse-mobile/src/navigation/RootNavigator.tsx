@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '@/hooks/useAuth';
-import { DramaSeries, Episode } from '@/types/drama';
+import { RootStackParamList } from '@/types/drama';
 
 // Import screens
 import SignIn from '@/screens/auth/SignIn';
@@ -12,24 +12,14 @@ import EpisodePlayer from '@/screens/series/EpisodePlayer';
 import UserProfile from '@/screens/profile/UserProfile';
 import LoadingScreen from '@/screens/common/LoadingScreen';
 
-// Define root stack param list for type safety
-export type RootStackParamList = {
-  SignIn: undefined;
-  SignUp: undefined;
-  MainTabs: undefined;
-  SeriesDetails: { id: number };
-  EpisodePlayer: { 
-    episode: Episode;
-    series: DramaSeries;
-  };
-  UserProfile: { userId: number };
-  LoadingScreen: { message?: string };
-};
-
-// Create the stack navigator
+// Create stack navigator
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export default function RootNavigator() {
+/**
+ * Root navigator component
+ * Handles authentication flow and main navigation structure
+ */
+const RootNavigator: React.FC = () => {
   const { user, isLoading } = useAuth();
 
   // Show loading screen while checking authentication
@@ -37,36 +27,57 @@ export default function RootNavigator() {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen 
-          name="LoadingScreen" 
+          name="Loading" 
           component={LoadingScreen} 
-          initialParams={{ message: 'Starting up...' }} 
+          initialParams={{ message: 'Loading...' }} 
         />
       </Stack.Navigator>
     );
   }
 
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
-        headerShown: false,
-        animation: 'slide_from_right',
-      }}
-    >
-      {!user ? (
-        // Auth screens
-        <>
-          <Stack.Screen name="SignIn" component={SignIn} />
-          <Stack.Screen name="SignUp" component={SignUp} />
-        </>
-      ) : (
-        // Main app screens
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {user ? (
+        // Authenticated user flows
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} />
-          <Stack.Screen name="SeriesDetails" component={SeriesDetails} />
-          <Stack.Screen name="EpisodePlayer" component={EpisodePlayer} />
-          <Stack.Screen name="UserProfile" component={UserProfile} />
+          <Stack.Screen 
+            name="SeriesDetails" 
+            component={SeriesDetails} 
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen 
+            name="EpisodePlayer" 
+            component={EpisodePlayer} 
+            options={{ 
+              animation: 'slide_from_bottom',
+              presentation: 'fullScreenModal',
+              orientation: 'landscape'
+            }}
+          />
+          <Stack.Screen 
+            name="UserProfile" 
+            component={UserProfile} 
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen 
+            name="Loading" 
+            component={LoadingScreen} 
+            options={{ 
+              animation: 'fade',
+              presentation: 'transparentModal' 
+            }}
+          />
+        </>
+      ) : (
+        // Authentication flows
+        <>
+          <Stack.Screen name="Login" component={SignIn} />
+          <Stack.Screen name="SignUp" component={SignUp} />
         </>
       )}
     </Stack.Navigator>
   );
-}
+};
+
+export default RootNavigator;

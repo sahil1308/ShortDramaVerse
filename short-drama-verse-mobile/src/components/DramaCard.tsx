@@ -1,286 +1,317 @@
 import React from 'react';
-import { StyleSheet, View, Text, Image, TouchableOpacity, ImageBackground } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { DramaSeries } from '@/types/drama';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '@/navigation/RootNavigator';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/types/drama';
+import { getResourceUrl } from '@/services/api';
 
-type DramaCardProps = {
-  item: DramaSeries;
-  compact?: boolean; // For smaller card in horizontal lists
-  featured?: boolean; // For featured/hero section
-};
+export type DramaCardSize = 'small' | 'medium' | 'large' | 'featured';
+export type DramaCardLayout = 'grid' | 'horizontal' | 'vertical';
 
-// Define navigation prop type
-type DramaNavigationProp = StackNavigationProp<RootStackParamList, 'SeriesDetails'>;
+interface DramaCardProps {
+  series: DramaSeries;
+  size?: DramaCardSize;
+  layout?: DramaCardLayout;
+  showRating?: boolean;
+  showTitle?: boolean;
+  onPress?: (series: DramaSeries) => void;
+  onLongPress?: (series: DramaSeries) => void;
+  isInWatchlist?: boolean;
+  onToggleWatchlist?: (series: DramaSeries) => void;
+}
 
-const DramaCard: React.FC<DramaCardProps> = ({ 
-  item, 
-  compact = false, 
-  featured = false 
+/**
+ * DramaCard component for displaying a drama series
+ * Supports different sizes and layouts
+ */
+const DramaCard: React.FC<DramaCardProps> = ({
+  series,
+  size = 'medium',
+  layout = 'vertical',
+  showRating = true,
+  showTitle = true,
+  onPress,
+  onLongPress,
+  isInWatchlist,
+  onToggleWatchlist,
 }) => {
-  const navigation = useNavigation<DramaNavigationProp>();
-  
-  // Handle navigation to drama series details
-  const handlePress = () => {
-    navigation.navigate('SeriesDetails', { seriesId: item.id });
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { width } = Dimensions.get('window');
+
+  // Calculate card dimensions based on size and layout
+  const getCardDimensions = () => {
+    switch (size) {
+      case 'small':
+        return layout === 'horizontal' 
+          ? { width: width * 0.3, height: 100 } 
+          : { width: width * 0.3, height: 160 };
+      case 'medium':
+        return layout === 'horizontal' 
+          ? { width: width * 0.45, height: 120 } 
+          : { width: width * 0.4, height: 220 };
+      case 'large':
+        return layout === 'horizontal' 
+          ? { width: width * 0.6, height: 140 } 
+          : { width: width * 0.5, height: 280 };
+      case 'featured':
+        return layout === 'horizontal' 
+          ? { width: width * 0.9, height: 180 } 
+          : { width: width - 32, height: 200 };
+    }
   };
-  
-  // Render compact card for horizontal scrolling sections
-  if (compact) {
+
+  const dimensions = getCardDimensions();
+
+  // Determine font size based on card size
+  const getTitleFontSize = () => {
+    switch (size) {
+      case 'small':
+        return 12;
+      case 'medium':
+        return 14;
+      case 'large':
+        return 16;
+      case 'featured':
+        return 18;
+    }
+  };
+
+  const handlePress = () => {
+    if (onPress) {
+      onPress(series);
+    } else {
+      navigation.navigate('SeriesDetails', { id: series.id });
+    }
+  };
+
+  const handleLongPress = () => {
+    if (onLongPress) {
+      onLongPress(series);
+    }
+  };
+
+  const handleWatchlistToggle = (e: any) => {
+    e.stopPropagation();
+    if (onToggleWatchlist) {
+      onToggleWatchlist(series);
+    }
+  };
+
+  const renderHorizontalLayout = () => {
     return (
-      <TouchableOpacity 
-        style={styles.compactContainer} 
+      <TouchableOpacity
+        style={[styles.horizontalContainer, { width: dimensions.width, height: dimensions.height }]}
         onPress={handlePress}
+        onLongPress={handleLongPress}
         activeOpacity={0.7}
       >
-        <Image 
-          source={{ uri: item.thumbnailImage }} 
-          style={styles.compactImage}
+        <Image
+          source={{ uri: getResourceUrl(series.coverImage) }}
+          style={styles.horizontalImage}
           resizeMode="cover"
         />
-        <View style={styles.compactInfo}>
-          <Text style={styles.compactTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={styles.compactGenre} numberOfLines={1}>
-            {item.genre.join(' • ')}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
-  
-  // Render featured/hero card
-  if (featured) {
-    return (
-      <TouchableOpacity 
-        style={styles.featuredContainer} 
-        onPress={handlePress}
-        activeOpacity={0.9}
-      >
-        <ImageBackground 
-          source={{ uri: item.coverImage }} 
-          style={styles.featuredImage}
-          resizeMode="cover"
-        >
-          <View style={styles.featuredGradient}>
-            <View style={styles.featuredContent}>
-              <Text style={styles.featuredLabel}>FEATURED</Text>
-              <Text style={styles.featuredTitle}>{item.title}</Text>
-              <View style={styles.featuredInfo}>
-                <Text style={styles.featuredYear}>{item.releaseYear}</Text>
-                <Text style={styles.featuredDot}>•</Text>
-                <Text style={styles.featuredEpisodes}>{item.totalEpisodes} Episodes</Text>
-                {item.isFree === false && (
-                  <>
-                    <Text style={styles.featuredDot}>•</Text>
-                    <FontAwesome name="diamond" size={12} color="#FFD700" />
-                    <Text style={styles.featuredPremium}>Premium</Text>
-                  </>
-                )}
-              </View>
-              <Text style={styles.featuredDescription} numberOfLines={2}>
-                {item.description}
-              </Text>
-              <View style={styles.watchButton}>
-                <FontAwesome name="play-circle" size={14} color="#FFF" />
-                <Text style={styles.watchButtonText}>Watch Now</Text>
-              </View>
+        <View style={styles.horizontalContent}>
+          {showTitle && (
+            <Text style={[styles.title, { fontSize: getTitleFontSize() }]} numberOfLines={2}>
+              {series.title}
+            </Text>
+          )}
+          {showRating && series.averageRating && (
+            <View style={styles.ratingContainer}>
+              <Ionicons name="star" size={12} color="#FFD700" />
+              <Text style={styles.rating}>{series.averageRating.toFixed(1)}</Text>
             </View>
-          </View>
-        </ImageBackground>
-      </TouchableOpacity>
-    );
-  }
-  
-  // Render standard card
-  return (
-    <TouchableOpacity 
-      style={styles.container} 
-      onPress={handlePress}
-      activeOpacity={0.8}
-    >
-      <Image 
-        source={{ uri: item.thumbnailImage }} 
-        style={styles.image}
-        resizeMode="cover"
-      />
-      <View style={styles.infoContainer}>
-        <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-        <View style={styles.detailsRow}>
-          <Text style={styles.year}>{item.releaseYear}</Text>
-          <Text style={styles.dot}>•</Text>
-          <Text style={styles.episodes}>{item.totalEpisodes} Ep</Text>
-          {item.averageRating && (
-            <>
-              <Text style={styles.dot}>•</Text>
-              <FontAwesome name="star" size={12} color="#FFD700" />
-              <Text style={styles.rating}>{item.averageRating.toFixed(1)}</Text>
-            </>
+          )}
+          {size !== 'small' && (
+            <Text style={styles.info} numberOfLines={1}>
+              {series.releaseYear} • {series.genre[0]}
+            </Text>
+          )}
+          {(size === 'large' || size === 'featured') && (
+            <Text style={styles.description} numberOfLines={2}>
+              {series.description}
+            </Text>
           )}
         </View>
-        <Text style={styles.genre} numberOfLines={1}>
-          {item.genre.join(' • ')}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        {onToggleWatchlist && (
+          <TouchableOpacity
+            style={styles.watchlistButton}
+            onPress={handleWatchlistToggle}
+            hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+          >
+            <MaterialIcons 
+              name={isInWatchlist ? "bookmark" : "bookmark-outline"} 
+              size={24} 
+              color={isInWatchlist ? "#E50914" : "#FFFFFF"} 
+            />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderVerticalLayout = () => {
+    return (
+      <TouchableOpacity
+        style={[styles.verticalContainer, { width: dimensions.width }]}
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: getResourceUrl(series.coverImage) }}
+            style={[styles.verticalImage, { height: dimensions.height * 0.75 }]}
+            resizeMode="cover"
+          />
+          {series.isExclusive && (
+            <View style={styles.exclusiveBadge}>
+              <Text style={styles.exclusiveText}>EXCLUSIVE</Text>
+            </View>
+          )}
+          {onToggleWatchlist && (
+            <TouchableOpacity
+              style={styles.watchlistButton}
+              onPress={handleWatchlistToggle}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+            >
+              <MaterialIcons 
+                name={isInWatchlist ? "bookmark" : "bookmark-outline"} 
+                size={24} 
+                color={isInWatchlist ? "#E50914" : "#FFFFFF"} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.verticalContent}>
+          {showTitle && (
+            <Text style={[styles.title, { fontSize: getTitleFontSize() }]} numberOfLines={2}>
+              {series.title}
+            </Text>
+          )}
+          <View style={styles.infoRow}>
+            {showRating && series.averageRating && (
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={12} color="#FFD700" />
+                <Text style={styles.rating}>{series.averageRating.toFixed(1)}</Text>
+              </View>
+            )}
+            {size !== 'small' && (
+              <Text style={styles.info} numberOfLines={1}>
+                {series.releaseYear} • {series.genre[0]}
+              </Text>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return layout === 'horizontal' ? renderHorizontalLayout() : renderVerticalLayout();
 };
 
 const styles = StyleSheet.create({
-  // Standard card styles
-  container: {
-    width: '100%',
+  // Horizontal layout styles
+  horizontalContainer: {
     flexDirection: 'row',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#18181B',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  horizontalImage: {
+    width: '40%',
+    height: '100%',
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  horizontalContent: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'center',
+  },
+  
+  // Vertical layout styles
+  verticalContainer: {
+    backgroundColor: 'transparent',
     borderRadius: 8,
     overflow: 'hidden',
     marginBottom: 12,
   },
-  image: {
-    width: 120,
-    height: 80,
-    borderRadius: 4,
-  },
-  infoContainer: {
-    flex: 1,
-    padding: 8,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFF',
-    marginBottom: 4,
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  year: {
-    fontSize: 12,
-    color: '#B8B8B8',
-  },
-  dot: {
-    fontSize: 12,
-    color: '#666',
-    marginHorizontal: 4,
-  },
-  episodes: {
-    fontSize: 12,
-    color: '#B8B8B8',
-  },
-  rating: {
-    fontSize: 12,
-    color: '#FFD700',
-    marginLeft: 2,
-  },
-  genre: {
-    fontSize: 12,
-    color: '#999',
-  },
-  
-  // Compact card styles
-  compactContainer: {
-    width: 120,
-    marginRight: 10,
-  },
-  compactImage: {
-    width: 120,
-    height: 160,
-    borderRadius: 6,
-  },
-  compactInfo: {
-    marginTop: 6,
-  },
-  compactTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  compactGenre: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 2,
-  },
-  
-  // Featured card styles
-  featuredContainer: {
-    width: '100%',
-    height: 240,
-    marginBottom: 20,
+  imageContainer: {
+    position: 'relative',
     borderRadius: 8,
     overflow: 'hidden',
   },
-  featuredImage: {
+  verticalImage: {
     width: '100%',
-    height: '100%',
+    borderRadius: 8,
   },
-  featuredGradient: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    backgroundGradient: 'linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.2))',
-    justifyContent: 'flex-end',
+  verticalContent: {
+    padding: 8,
+    paddingBottom: 12,
   },
-  featuredContent: {
-    padding: 16,
-  },
-  featuredLabel: {
-    color: '#4CAF50',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  featuredTitle: {
+  
+  // Shared styles
+  title: {
     color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  featuredInfo: {
+  ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginRight: 8,
   },
-  featuredYear: {
-    color: '#DDDDDD',
-    fontSize: 13,
-  },
-  featuredDot: {
-    color: '#999',
-    marginHorizontal: 6,
-  },
-  featuredEpisodes: {
-    color: '#DDDDDD',
-    fontSize: 13,
-  },
-  featuredPremium: {
-    color: '#FFD700',
-    fontSize: 13,
+  rating: {
+    color: '#FFFFFF',
+    fontSize: 12,
     marginLeft: 4,
   },
-  featuredDescription: {
-    color: '#BBBBBB',
-    fontSize: 13,
-    marginBottom: 16,
+  info: {
+    color: '#D1D5DB',
+    fontSize: 12,
+    marginTop: 2,
   },
-  watchButton: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E50914',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
+    marginTop: 4,
   },
-  watchButtonText: {
+  description: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  exclusiveBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#E50914',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  exclusiveText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 6,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  watchlistButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 4,
   },
 });
 

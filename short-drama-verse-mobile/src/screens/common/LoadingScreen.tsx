@@ -1,19 +1,27 @@
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { useTheme } from '@react-navigation/native';
-import { RootStackParamList } from '@/navigation/RootNavigator';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { RouteProp } from '@react-navigation/native';
+import { RootStackParamList } from '@/types/drama';
+
+type LoadingScreenRouteProp = RouteProp<RootStackParamList, 'Loading'>;
 
 interface LoadingScreenProps {
+  route?: LoadingScreenRouteProp;
   message?: string;
 }
 
-const LoadingScreen: React.FC<LoadingScreenProps> = ({ message = 'Loading...' }) => {
-  const { colors } = useTheme();
-  
+/**
+ * Loading screen component with customizable message
+ * Used for showing loading states across the app
+ */
+const LoadingScreen: React.FC<LoadingScreenProps> = ({ route, message }) => {
+  // Use route params message if provided, otherwise use prop message or default
+  const displayMessage = route?.params?.message || message || 'Loading content...';
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={[styles.text, { color: colors.text }]}>{message}</Text>
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color="#E50914" />
+      <Text style={styles.text}>{displayMessage}</Text>
     </View>
   );
 };
@@ -23,11 +31,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#121212',
     padding: 20,
   },
   text: {
-    marginTop: 15,
+    marginTop: 12,
     fontSize: 16,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
 });

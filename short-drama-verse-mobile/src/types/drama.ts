@@ -1,4 +1,8 @@
-// User type
+import { NavigatorScreenParams } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+
+// User Types
 export interface User {
   id: number;
   username: string;
@@ -6,32 +10,41 @@ export interface User {
   displayName: string | null;
   profilePicture: string | null;
   bio: string | null;
-  createdAt: string | null;
-  isAdmin: boolean | null;
-  coinBalance: number | null;
-  token?: string; // For authentication
+  createdAt: Date;
+  isAdmin: boolean;
+  coinBalance: number;
 }
 
-// Drama Series type
+// Authentication Types
+export interface AuthCredentials {
+  username: string;
+  password: string;
+}
+
+export interface RegisterCredentials extends AuthCredentials {
+  email: string;
+  displayName?: string;
+}
+
+// Content Types
 export interface DramaSeries {
   id: number;
   title: string;
   description: string;
-  genre: string[];
   coverImage: string;
-  thumbnailImage: string;
+  bannerImage: string | null;
   releaseYear: number;
   director: string;
   actors: string[];
+  genre: string[];
   averageRating: number | null;
-  totalEpisodes: number;
-  isFeatured: boolean;
-  isPopular: boolean;
-  isTrending: boolean;
-  createdAt: string;
+  episodeCount: number;
+  isComplete: boolean;
+  isExclusive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// Episode type
 export interface Episode {
   id: number;
   seriesId: number;
@@ -41,81 +54,102 @@ export interface Episode {
   videoUrl: string;
   duration: number | null;
   episodeNumber: number;
-  isFree: boolean;
-  coinPrice: number | null;
-  releaseDate: string;
-  createdAt: string;
+  season: number;
+  isExclusive: boolean;
+  releaseDate: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// Watchlist type
-export interface Watchlist {
-  id: number;
-  userId: number;
-  seriesId: number;
-  createdAt: string;
-  series?: DramaSeries;
-}
-
-// Watch History type
-export interface WatchHistory {
-  id: number;
-  userId: number;
-  episodeId: number;
-  progress: number;
-  completed: boolean;
-  lastWatched: string;
-  createdAt: string;
-  episode?: Episode & { series?: DramaSeries };
-}
-
-// Rating type
+// User Interaction Types
 export interface Rating {
   id: number;
   userId: number;
   seriesId: number;
   rating: number;
   comment: string | null;
-  createdAt: string;
-  user?: Pick<User, 'id' | 'username' | 'profilePicture'>;
+  createdAt: Date;
+  user?: {
+    id: number;
+    username: string;
+    profilePicture: string | null;
+  };
 }
 
-// Transaction type
+export interface Watchlist {
+  id: number;
+  userId: number;
+  seriesId: number;
+  addedAt: Date;
+  series?: DramaSeries;
+}
+
+export interface WatchHistory {
+  id: number;
+  userId: number;
+  episodeId: number;
+  watchedAt: Date;
+  progress: number;
+  completed: boolean;
+  episode?: Episode & {
+    series?: DramaSeries;
+  };
+}
+
+// Transaction Types
 export interface Transaction {
   id: number;
   userId: number;
   amount: number;
   description: string;
-  transactionType: 'PURCHASE' | 'DEPOSIT' | 'REFUND';
-  episodeId: number | null;
-  status: 'COMPLETED' | 'PENDING' | 'FAILED';
-  createdAt: string;
+  transactionType: 'purchase' | 'credit';
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: Date;
+  meta: {
+    episodeId?: number;
+    seriesId?: number;
+    packageId?: number;
+  } | null;
 }
 
-// Advertisement type
+// Advertisement Types
 export interface Advertisement {
   id: number;
   title: string;
   description: string;
   imageUrl: string;
-  linkUrl: string;
-  placement: string;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
+  targetUrl: string;
+  placement: 'banner' | 'sidebar' | 'interstitial';
+  active: boolean;
+  startDate: Date;
+  endDate: Date | null;
   impressions: number;
   clicks: number;
-  createdAt: string;
+  createdAt: Date;
 }
 
-// Authentication credential types
-export interface AuthCredentials {
-  username: string;
-  password: string;
-}
+// Navigation Types
+export type RootStackParamList = {
+  Loading: { message?: string };
+  AuthStack: NavigatorScreenParams<AuthStackParamList>;
+  MainTabs: NavigatorScreenParams<MainTabsParamList>;
+  SeriesDetails: { id: number };
+  EpisodePlayer: { id: number };
+  UserProfile: { id: number };
+};
 
-export interface RegisterCredentials {
-  username: string;
-  email: string;
-  password: string;
-  displayName?: string;
-}
+export type AuthStackParamList = {
+  SignIn: undefined;
+  SignUp: undefined;
+  ForgotPassword: undefined;
+};
+
+export type MainTabsParamList = {
+  Home: undefined;
+  Search: { initialQuery?: string };
+  Watchlist: undefined;
+  Profile: undefined;
+};
+
+export type RootStackNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+export type MainTabsNavigationProp = BottomTabNavigationProp<MainTabsParamList>;
