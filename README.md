@@ -96,6 +96,18 @@ These alternative servers provide workarounds for the Vite host restrictions in 
 
 This project is configured to automatically sync with GitHub. Any changes made in Replit will be automatically pushed to the connected GitHub repository.
 
+### Automatic Sync
+
+The project includes an auto-sync service that will automatically detect changes and push them to GitHub:
+
+```bash
+# Start the auto-sync service
+./start-sync.sh
+
+# Stop the auto-sync service
+./stop-sync.sh
+```
+
 ### Manual Sync
 
 If you need to manually sync changes to GitHub:

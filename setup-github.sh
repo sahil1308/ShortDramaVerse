@@ -45,8 +45,8 @@ EOF
 
 chmod +x .git/hooks/post-commit
 
-# Create a cron job to push changes every 5 minutes (fallback mechanism)
-(crontab -l 2>/dev/null; echo "*/5 * * * * cd $(pwd) && git add -A && git diff --staged --quiet || (git commit -m 'Auto-sync from Replit' && git push origin main)") | crontab -
+# Note: Automatic cron-based syncing is not available in Replit
+# Instead, we'll rely on the post-commit hook and manual sync script
 
 echo "==========================================="
 echo "GitHub integration successfully configured!"
