@@ -1,179 +1,190 @@
 /**
  * Drama Types
  * 
- * Contains all types and interfaces related to drama series and episodes.
+ * Type definitions for drama series, episodes, and related content.
  */
 
 /**
- * Drama Series Interface
- * Represents a drama series in the system
+ * Drama Series
+ * Represents a drama series in the application
  */
 export interface DramaSeries {
   id: number;
   title: string;
   description: string;
-  coverImage: string;
-  thumbnailImage: string;
-  bannerImage: string | null;
+  posterUrl: string;
+  bannerUrl?: string;
   genre: string[];
   releaseYear: number;
-  country: string;
-  language: string;
+  rating: number;
   director: string;
   cast: string[];
-  averageRating: number | null;
-  ratingCount: number;
-  episodeCount: number;
-  totalDuration: number; // in minutes
-  isPremium: boolean;
-  isCompleted: boolean;
-  isComingSoon: boolean;
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
+  totalEpisodes: number;
+  language: string;
+  country: string;
+  status: 'ongoing' | 'completed' | 'coming_soon';
   viewCount: number;
-  tags: string[];
+  trailerUrl?: string;
+  tags?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
- * Episode Interface
- * Represents an episode of a drama series
+ * Episode
+ * Represents an episode in a drama series
  */
 export interface Episode {
   id: number;
   seriesId: number;
   title: string;
   description: string;
-  thumbnailImage: string;
   episodeNumber: number;
-  seasonNumber: number;
-  duration: number; // in minutes
+  duration: number; // In seconds
+  thumbnailUrl: string;
   videoUrl: string;
-  streamingUrl: string | null; // URL for streaming
-  downloadUrl: string | null; // URL for downloading (premium feature)
-  releaseDate: string; // ISO date string
-  isPremium: boolean;
-  isFree: boolean; // First few episodes might be free even in premium series
-  isAvailable: boolean; // Might be temporarily unavailable
   viewCount: number;
-  subtitles: Subtitle[];
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
+  releaseDate: string;
+  subtitles?: SubtitleTrack[];
+  isFree?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
- * Subtitle Interface
- * Represents subtitle tracks for episodes
+ * Subtitle Track
+ * Represents a subtitle track for an episode
  */
-export interface Subtitle {
+export interface SubtitleTrack {
   id: number;
   episodeId: number;
   language: string;
-  url: string; // URL to subtitle file (WebVTT format)
+  url: string;
   isDefault: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
- * Watch History Interface
- * Represents a user's watch history entry
+ * Movie
+ * Represents a standalone movie (not part of a series)
  */
-export interface WatchHistory {
+export interface Movie {
+  id: number;
+  title: string;
+  description: string;
+  posterUrl: string;
+  bannerUrl?: string;
+  genre: string[];
+  releaseYear: number;
+  rating: number;
+  director: string;
+  cast: string[];
+  duration: number; // In seconds
+  language: string;
+  country: string;
+  viewCount: number;
+  videoUrl: string;
+  trailerUrl?: string;
+  subtitles?: SubtitleTrack[];
+  tags?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/**
+ * User Watch Progress
+ * Represents a user's watch progress for a specific episode or movie
+ */
+export interface WatchProgress {
   id: number;
   userId: number;
-  episodeId: number;
-  seriesId: number;
-  watchedAt: string; // ISO date string
-  progress: number; // Percentage watched (0-100)
+  contentId: number;
+  contentType: 'episode' | 'movie';
+  position: number; // In seconds
   completed: boolean;
-  duration: number; // How long they watched in seconds
+  lastWatched: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
- * Watchlist Interface
- * Represents a series in a user's watchlist
+ * User Watchlist Item
+ * Represents an item in a user's watchlist
  */
-export interface Watchlist {
+export interface WatchlistItem {
   id: number;
   userId: number;
-  seriesId: number;
-  addedAt: string; // ISO date string
-  position?: number; // Optional ordering position
+  contentId: number;
+  contentType: 'series' | 'movie';
+  addedAt: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
- * Rating Interface
- * Represents a user's rating for a series
- */
-export interface Rating {
-  id: number;
-  userId: number;
-  seriesId: number;
-  rating: number; // 1-5 stars
-  review: string | null;
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
-  likeCount: number;
-  dislikeCount: number;
-}
-
-/**
- * Comment Interface
- * Represents a user's comment on an episode
+ * Episode Comment
+ * Represents a user comment on an episode
  */
 export interface Comment {
   id: number;
   userId: number;
-  episodeId: number;
-  content: string;
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
-  likeCount: number;
-  dislikeCount: number;
-  parentId: number | null; // For replies, references parent comment
+  username: string;
+  profilePicture?: string;
+  contentId: number;
+  contentType: 'episode' | 'series' | 'movie';
+  text: string;
+  timestamp: number; // In seconds, for episode comments at specific times
+  likes: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+  replies?: Comment[];
 }
 
 /**
- * Download Interface
- * Represents a downloaded episode on the device
+ * User Rating
+ * Represents a user's rating for a series or movie
  */
-export interface Download {
+export interface UserRating {
   id: number;
-  episodeId: number;
-  seriesId: number;
+  userId: number;
+  contentId: number;
+  contentType: 'series' | 'movie';
+  rating: number; // 1-5 stars
+  review?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/**
+ * Recommendation
+ * Represents a content recommendation for a user
+ */
+export interface Recommendation {
+  id: number;
+  userId: number;
+  contentId: number;
+  contentType: 'series' | 'movie';
+  score: number; // Recommendation score
+  reason: string;
+  createdAt?: Date;
+}
+
+/**
+ * Featured Content
+ * Represents content featured on the home page
+ */
+export interface FeaturedContent {
+  id: number;
+  contentId: number;
+  contentType: 'series' | 'movie';
   title: string;
-  fileSize: number; // in bytes
-  filePath: string; // Local file path
-  thumbnailPath: string | null; // Local thumbnail path
-  downloadedAt: string; // ISO date string
-  expiresAt: string | null; // ISO date string, might have expiration for some content
-  quality: 'standard' | 'high';
-  isCompleted: boolean;
-  progress: number; // Download progress (0-100)
-}
-
-/**
- * Genre Interface
- * Represents a content genre
- */
-export interface Genre {
-  id: number;
-  name: string;
   description: string;
-  coverImage: string | null;
-  seriesCount: number;
-}
-
-/**
- * Content Filter Interface
- * For filtering drama series
- */
-export interface ContentFilter {
-  genre?: string[];
-  country?: string[];
-  language?: string[];
-  releaseYear?: number[];
-  isPremium?: boolean;
-  isCompleted?: boolean;
-  minRating?: number;
-  sortBy?: 'popularity' | 'rating' | 'newest' | 'oldest';
-  searchQuery?: string;
+  imageUrl: string;
+  priority: number;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
