@@ -1,347 +1,366 @@
 /**
  * Storage Service
  * 
- * Handles all local storage operations for the application
- * including persistence of user preferences, auth tokens, and cache.
+ * Provides methods for storing and retrieving data from device storage.
+ * Uses AsyncStorage as the underlying storage mechanism.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEYS } from '@/constants/config';
+import { APP_CONFIG } from '@/constants/config';
 
 /**
- * StorageService Class
+ * Storage Service Class
  * 
- * Provides methods for interacting with device storage
+ * Handles all local storage operations for the application
  */
 class StorageService {
   /**
-   * Saves auth token to storage
+   * Save a value to storage
    * 
-   * @param token JWT auth token
+   * @param key Storage key
+   * @param value Value to store (will be JSON stringified)
    */
-  async setAuthToken(token: string): Promise<void> {
+  async set<T>(key: string, value: T): Promise<void> {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+      const jsonValue = JSON.stringify(value);
+      await AsyncStorage.setItem(key, jsonValue);
     } catch (error) {
-      console.error('Error saving auth token:', error);
-      throw error;
+      console.error(`Error storing data for key ${key}:`, error);
+      throw new Error(`Failed to store data: ${error}`);
     }
   }
 
   /**
-   * Retrieves auth token from storage
+   * Get a value from storage
    * 
-   * @returns The stored auth token or null if not found
+   * @param key Storage key
+   * @returns The stored value, or null if not found
    */
-  async getAuthToken(): Promise<string | null> {
+  async get<T>(key: string): Promise<T | null> {
     try {
-      return await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const jsonValue = await AsyncStorage.getItem(key);
+      return jsonValue != null ? JSON.parse(jsonValue) as T : null;
     } catch (error) {
-      console.error('Error getting auth token:', error);
-      return null;
+      console.error(`Error retrieving data for key ${key}:`, error);
+      throw new Error(`Failed to retrieve data: ${error}`);
     }
   }
 
   /**
-   * Saves refresh token to storage
+   * Remove a value from storage
    * 
-   * @param token JWT refresh token
+   * @param key Storage key
    */
-  async setRefreshToken(token: string): Promise<void> {
+  async remove(key: string): Promise<void> {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
+      await AsyncStorage.removeItem(key);
     } catch (error) {
-      console.error('Error saving refresh token:', error);
-      throw error;
+      console.error(`Error removing data for key ${key}:`, error);
+      throw new Error(`Failed to remove data: ${error}`);
     }
   }
 
   /**
-   * Retrieves refresh token from storage
-   * 
-   * @returns The stored refresh token or null if not found
+   * Clear all app storage
    */
-  async getRefreshToken(): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-    } catch (error) {
-      console.error('Error getting refresh token:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Clears all authentication data from storage
-   */
-  async clearAuthData(): Promise<void> {
-    try {
-      await AsyncStorage.multiRemove([
-        STORAGE_KEYS.AUTH_TOKEN,
-        STORAGE_KEYS.REFRESH_TOKEN,
-        STORAGE_KEYS.USER
-      ]);
-    } catch (error) {
-      console.error('Error clearing auth data:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Saves user data to storage
-   * 
-   * @param userData User object to store
-   */
-  async setUser(userData: any): Promise<void> {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
-    } catch (error) {
-      console.error('Error saving user data:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Retrieves user data from storage
-   * 
-   * @returns The stored user data or null if not found
-   */
-  async getUser<T>(): Promise<T | null> {
-    try {
-      const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
-      return userData ? JSON.parse(userData) : null;
-    } catch (error) {
-      console.error('Error getting user data:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Saves watch history to storage
-   * 
-   * @param watchHistory Array of watch history items
-   */
-  async setWatchHistory(watchHistory: any[]): Promise<void> {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.WATCH_HISTORY, JSON.stringify(watchHistory));
-    } catch (error) {
-      console.error('Error saving watch history:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Retrieves watch history from storage
-   * 
-   * @returns The stored watch history or empty array if not found
-   */
-  async getWatchHistory<T>(): Promise<T[]> {
-    try {
-      const watchHistory = await AsyncStorage.getItem(STORAGE_KEYS.WATCH_HISTORY);
-      return watchHistory ? JSON.parse(watchHistory) : [];
-    } catch (error) {
-      console.error('Error getting watch history:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Adds an item to watch history
-   * 
-   * @param item New watch history item
-   * @param maxItems Maximum number of items to keep in history
-   */
-  async addToWatchHistory(item: any, maxItems: number = 20): Promise<void> {
-    try {
-      const history = await this.getWatchHistory<any>();
-      
-      // Remove if already exists (to move to top of list)
-      const filteredHistory = history.filter(historyItem => historyItem.id !== item.id);
-      
-      // Add new item at the beginning
-      const newHistory = [item, ...filteredHistory].slice(0, maxItems);
-      
-      await this.setWatchHistory(newHistory);
-    } catch (error) {
-      console.error('Error adding to watch history:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Updates progress for an item in watch history
-   * 
-   * @param id ID of the item to update
-   * @param progressData New progress data
-   */
-  async updateWatchProgress(id: number, progressData: any): Promise<void> {
-    try {
-      const history = await this.getWatchHistory<any>();
-      const itemIndex = history.findIndex(item => item.id === id);
-      
-      if (itemIndex >= 0) {
-        history[itemIndex] = { ...history[itemIndex], ...progressData };
-        await this.setWatchHistory(history);
-      }
-    } catch (error) {
-      console.error('Error updating watch progress:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Saves user app preferences 
-   * 
-   * @param key Preference key
-   * @param value Preference value
-   */
-  async setPreference<T>(key: string, value: T): Promise<void> {
-    try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      console.error(`Error saving preference ${key}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Retrieves user app preference
-   * 
-   * @param key Preference key
-   * @param defaultValue Default value if preference not found
-   * @returns The stored preference value or defaultValue if not found
-   */
-  async getPreference<T>(key: string, defaultValue: T): Promise<T> {
-    try {
-      const value = await AsyncStorage.getItem(key);
-      return value ? JSON.parse(value) : defaultValue;
-    } catch (error) {
-      console.error(`Error getting preference ${key}:`, error);
-      return defaultValue;
-    }
-  }
-
-  /**
-   * Saves search history to storage
-   * 
-   * @param searchHistory Array of search terms
-   */
-  async setSearchHistory(searchHistory: string[]): Promise<void> {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.SEARCH_HISTORY, JSON.stringify(searchHistory));
-    } catch (error) {
-      console.error('Error saving search history:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Retrieves search history from storage
-   * 
-   * @returns The stored search history or empty array if not found
-   */
-  async getSearchHistory(): Promise<string[]> {
-    try {
-      const searchHistory = await AsyncStorage.getItem(STORAGE_KEYS.SEARCH_HISTORY);
-      return searchHistory ? JSON.parse(searchHistory) : [];
-    } catch (error) {
-      console.error('Error getting search history:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Adds a term to search history
-   * 
-   * @param term Search term to add
-   * @param maxItems Maximum number of items to keep in history
-   */
-  async addToSearchHistory(term: string, maxItems: number = 10): Promise<void> {
-    try {
-      if (!term || term.trim() === '') return;
-      
-      const history = await this.getSearchHistory();
-      
-      // Remove if already exists (to move to top of list)
-      const filteredHistory = history.filter(item => item.toLowerCase() !== term.toLowerCase());
-      
-      // Add new item at the beginning
-      const newHistory = [term, ...filteredHistory].slice(0, maxItems);
-      
-      await this.setSearchHistory(newHistory);
-    } catch (error) {
-      console.error('Error adding to search history:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Clears search history
-   */
-  async clearSearchHistory(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.SEARCH_HISTORY);
-    } catch (error) {
-      console.error('Error clearing search history:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Sets device ID for analytics and tracking
-   * 
-   * @param deviceId Unique device identifier
-   */
-  async setDeviceId(deviceId: string): Promise<void> {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
-    } catch (error) {
-      console.error('Error saving device ID:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Gets device ID for analytics and tracking
-   * 
-   * @returns The stored device ID or null if not found
-   */
-  async getDeviceId(): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem(STORAGE_KEYS.DEVICE_ID);
-    } catch (error) {
-      console.error('Error getting device ID:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Gets multi-key data from storage
-   * 
-   * @param keys List of keys to fetch
-   * @returns Object with key-value pairs or null values for missing keys
-   */
-  async multiGet<T>(keys: string[]): Promise<Record<string, T | null>> {
-    try {
-      const keyValuePairs = await AsyncStorage.multiGet(keys);
-      return Object.fromEntries(
-        keyValuePairs.map(([key, value]) => [key, value ? JSON.parse(value) : null])
-      );
-    } catch (error) {
-      console.error('Error in multiGet:', error);
-      return keys.reduce((acc, key) => ({ ...acc, [key]: null }), {});
-    }
-  }
-
-  /**
-   * Clears all app data from storage
-   * Warning: This will clear all stored app data
-   */
-  async clearAllData(): Promise<void> {
+  async clear(): Promise<void> {
     try {
       await AsyncStorage.clear();
     } catch (error) {
-      console.error('Error clearing all data:', error);
-      throw error;
+      console.error('Error clearing storage:', error);
+      throw new Error(`Failed to clear storage: ${error}`);
     }
+  }
+
+  /**
+   * Get all storage keys
+   * 
+   * @returns Array of storage keys
+   */
+  async getAllKeys(): Promise<string[]> {
+    try {
+      return await AsyncStorage.getAllKeys();
+    } catch (error) {
+      console.error('Error getting all keys:', error);
+      throw new Error(`Failed to get storage keys: ${error}`);
+    }
+  }
+
+  // Auth specific methods
+
+  /**
+   * Set authentication token
+   * 
+   * @param token JWT token
+   */
+  async setAuthToken(token: string): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.AUTH_TOKEN, token);
+  }
+
+  /**
+   * Get authentication token
+   * 
+   * @returns JWT token or null
+   */
+  async getAuthToken(): Promise<string | null> {
+    return await this.get<string>(APP_CONFIG.STORAGE_KEYS.AUTH_TOKEN);
+  }
+
+  /**
+   * Set refresh token
+   * 
+   * @param token Refresh token
+   */
+  async setRefreshToken(token: string): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.REFRESH_TOKEN, token);
+  }
+
+  /**
+   * Get refresh token
+   * 
+   * @returns Refresh token or null
+   */
+  async getRefreshToken(): Promise<string | null> {
+    return await this.get<string>(APP_CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
+  }
+
+  /**
+   * Store user data
+   * 
+   * @param user User object
+   */
+  async setUser<T>(user: T): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.USER, user);
+  }
+
+  /**
+   * Get user data
+   * 
+   * @returns User object or null
+   */
+  async getUser<T>(): Promise<T | null> {
+    return await this.get<T>(APP_CONFIG.STORAGE_KEYS.USER);
+  }
+
+  /**
+   * Clear all authentication data
+   */
+  async clearAuthData(): Promise<void> {
+    await this.remove(APP_CONFIG.STORAGE_KEYS.AUTH_TOKEN);
+    await this.remove(APP_CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
+    await this.remove(APP_CONFIG.STORAGE_KEYS.USER);
+  }
+
+  // Settings methods
+
+  /**
+   * Save app settings
+   * 
+   * @param settings Settings object
+   */
+  async saveSettings<T>(settings: T): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.SETTINGS, settings);
+  }
+
+  /**
+   * Get app settings
+   * 
+   * @returns Settings object or null
+   */
+  async getSettings<T>(): Promise<T | null> {
+    return await this.get<T>(APP_CONFIG.STORAGE_KEYS.SETTINGS);
+  }
+
+  /**
+   * Update specific settings
+   * 
+   * @param updates Partial settings to update
+   */
+  async updateSettings<T>(updates: Partial<T>): Promise<T | null> {
+    const current = await this.getSettings<T>();
+    if (current) {
+      const updated = { ...current, ...updates };
+      await this.saveSettings(updated);
+      return updated;
+    }
+    await this.saveSettings(updates as T);
+    return updates as T;
+  }
+
+  // Watch history methods
+
+  /**
+   * Save watch history
+   * 
+   * @param watchHistory Array of watched items
+   */
+  async saveWatchHistory<T>(watchHistory: T[]): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.WATCH_HISTORY, watchHistory);
+  }
+
+  /**
+   * Get watch history
+   * 
+   * @returns Array of watched items or empty array
+   */
+  async getWatchHistory<T>(): Promise<T[]> {
+    const history = await this.get<T[]>(APP_CONFIG.STORAGE_KEYS.WATCH_HISTORY);
+    return history || [];
+  }
+
+  /**
+   * Add item to watch history
+   * 
+   * @param item Item to add to history
+   * @param maxItems Maximum number of items to keep in history
+   */
+  async addToWatchHistory<T extends { id: string | number }>(
+    item: T,
+    maxItems: number = APP_CONFIG.CONTENT.MAX_RECENT_SERIES
+  ): Promise<T[]> {
+    let history = await this.getWatchHistory<T>();
+    
+    // Remove item if it already exists (to move it to the top)
+    history = history.filter(i => i.id !== item.id);
+    
+    // Add item to the beginning
+    history.unshift(item);
+    
+    // Trim to max items
+    if (history.length > maxItems) {
+      history = history.slice(0, maxItems);
+    }
+    
+    await this.saveWatchHistory(history);
+    return history;
+  }
+
+  /**
+   * Clear watch history
+   */
+  async clearWatchHistory(): Promise<void> {
+    await this.remove(APP_CONFIG.STORAGE_KEYS.WATCH_HISTORY);
+  }
+
+  // Download management methods
+
+  /**
+   * Save downloaded content info
+   * 
+   * @param downloads Array of download info objects
+   */
+  async saveDownloads<T>(downloads: T[]): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.DOWNLOADS, downloads);
+  }
+
+  /**
+   * Get downloaded content info
+   * 
+   * @returns Array of download info objects or empty array
+   */
+  async getDownloads<T>(): Promise<T[]> {
+    const downloads = await this.get<T[]>(APP_CONFIG.STORAGE_KEYS.DOWNLOADS);
+    return downloads || [];
+  }
+
+  /**
+   * Add download info
+   * 
+   * @param downloadInfo Info about the downloaded content
+   */
+  async addDownload<T extends { id: string | number }>(downloadInfo: T): Promise<T[]> {
+    const downloads = await this.getDownloads<T>();
+    
+    // Check if already exists
+    const existingIndex = downloads.findIndex(d => d.id === downloadInfo.id);
+    
+    if (existingIndex >= 0) {
+      // Update existing
+      downloads[existingIndex] = downloadInfo;
+    } else {
+      // Add new
+      downloads.push(downloadInfo);
+    }
+    
+    await this.saveDownloads(downloads);
+    return downloads;
+  }
+
+  /**
+   * Remove download info
+   * 
+   * @param id ID of the download to remove
+   */
+  async removeDownload<T extends { id: string | number }>(id: string | number): Promise<T[]> {
+    let downloads = await this.getDownloads<T>();
+    downloads = downloads.filter(d => d.id !== id);
+    await this.saveDownloads(downloads);
+    return downloads;
+  }
+
+  /**
+   * Clear all downloads info
+   */
+  async clearDownloads(): Promise<void> {
+    await this.remove(APP_CONFIG.STORAGE_KEYS.DOWNLOADS);
+  }
+
+  // Search history methods
+
+  /**
+   * Save search history
+   * 
+   * @param searches Array of search terms
+   */
+  async saveSearchHistory(searches: string[]): Promise<void> {
+    await this.set(APP_CONFIG.STORAGE_KEYS.SEARCH_HISTORY, searches);
+  }
+
+  /**
+   * Get search history
+   * 
+   * @returns Array of search terms or empty array
+   */
+  async getSearchHistory(): Promise<string[]> {
+    const searches = await this.get<string[]>(APP_CONFIG.STORAGE_KEYS.SEARCH_HISTORY);
+    return searches || [];
+  }
+
+  /**
+   * Add search term to history
+   * 
+   * @param term Search term to add
+   * @param maxItems Maximum number of items to keep
+   */
+  async addSearchTerm(
+    term: string,
+    maxItems: number = APP_CONFIG.CONTENT.MAX_SEARCH_HISTORY
+  ): Promise<string[]> {
+    let searches = await this.getSearchHistory();
+    
+    // Clean the term
+    const cleanTerm = term.trim();
+    if (!cleanTerm) return searches;
+    
+    // Remove term if it already exists (to move it to the top)
+    searches = searches.filter(t => t.toLowerCase() !== cleanTerm.toLowerCase());
+    
+    // Add term to the beginning
+    searches.unshift(cleanTerm);
+    
+    // Trim to max items
+    if (searches.length > maxItems) {
+      searches = searches.slice(0, maxItems);
+    }
+    
+    await this.saveSearchHistory(searches);
+    return searches;
+  }
+
+  /**
+   * Clear search history
+   */
+  async clearSearchHistory(): Promise<void> {
+    await this.remove(APP_CONFIG.STORAGE_KEYS.SEARCH_HISTORY);
   }
 }
 

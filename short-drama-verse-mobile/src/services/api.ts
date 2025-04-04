@@ -1,201 +1,283 @@
 /**
  * API Service
  * 
- * This service handles all API communication with the backend server.
- * It provides methods for making HTTP requests and handling responses.
+ * Handles all API communication with the backend server.
+ * Provides methods for making HTTP requests and error handling.
  */
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import { API_CONFIG } from '@/constants/config';
 import { storageService } from './storage';
+import { API_CONFIG, APP_CONFIG } from '@/constants/config';
 
 /**
- * APIError class to standardize error handling across the app
- */
-export class APIError extends Error {
-  status: number;
-  data?: any;
-
-  constructor(message: string, status: number = 500, data?: any) {
-    super(message);
-    this.name = 'APIError';
-    this.status = status;
-    this.data = data;
-  }
-}
-
-/**
- * Axios instance with base configuration
- */
-const apiClient: AxiosInstance = axios.create({
-  baseURL: `${API_CONFIG.BASE_URL}/${API_CONFIG.VERSION}`,
-  timeout: API_CONFIG.TIMEOUT,
-  headers: API_CONFIG.HEADERS,
-});
-
-/**
- * Request interceptor
- * - Adds authorization header if token exists
- * - Handles request configuration
- */
-apiClient.interceptors.request.use(
-  async (config) => {
-    const token = await storageService.getAuthToken();
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    return config;
-  },
-  (error) => {
-    return Promise.reject(new APIError('Request configuration error', 0, error));
-  }
-);
-
-/**
- * Response interceptor
- * - Handles successful responses
- * - Handles error responses with standardized error handling
- */
-apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  async (error: AxiosError) => {
-    if (!error.response) {
-      // Network or connection error
-      return Promise.reject(
-        new APIError('Network error, please check your connection', 0)
-      );
-    }
-
-    const { status, data } = error.response;
-
-    // Handle token expiration
-    if (status === 401) {
-      try {
-        const refreshed = await refreshToken();
-        if (refreshed && error.config) {
-          // Retry the original request with new token
-          return apiClient(error.config);
-        }
-      } catch (refreshError) {
-        // If refresh token fails, redirect to login
-        await storageService.clearAuthData();
-        return Promise.reject(
-          new APIError('Session expired, please login again', 401)
-        );
-      }
-    }
-
-    // Handle other errors
-    let message = 'An unexpected error occurred';
-    if (typeof data === 'object' && data !== null && 'message' in data) {
-      message = data.message as string;
-    } else if (typeof data === 'string') {
-      message = data;
-    }
-
-    return Promise.reject(new APIError(message, status, data));
-  }
-);
-
-/**
- * Refreshes the authentication token
- * @returns {Promise<boolean>} True if token refresh was successful
- */
-async function refreshToken(): Promise<boolean> {
-  try {
-    const refreshToken = await storageService.getRefreshToken();
-    
-    if (!refreshToken) {
-      return false;
-    }
-    
-    const response = await axios.post(
-      `${API_CONFIG.BASE_URL}/${API_CONFIG.VERSION}${API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN}`,
-      { refreshToken }
-    );
-    
-    if (response.data.token) {
-      await storageService.setAuthToken(response.data.token);
-      if (response.data.refreshToken) {
-        await storageService.setRefreshToken(response.data.refreshToken);
-      }
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('Token refresh failed:', error);
-    return false;
-  }
-}
-
-/**
- * API Service for making HTTP requests
+ * API Service Class
+ * 
+ * Provides methods for making HTTP requests to the backend
  */
 class ApiService {
-  /**
-   * Makes a GET request to the specified endpoint
-   * @param endpoint The API endpoint to call
-   * @param params Optional query parameters
-   * @param config Optional axios request configuration
-   * @returns Promise resolving to the response data
-   */
-  async get<T>(endpoint: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await apiClient.get<T>(endpoint, {
-      ...config,
-      params,
+  private api: AxiosInstance;
+  private isRefreshing: boolean = false;
+  private refreshSubscribers: ((token: string) => void)[] = [];
+
+  constructor() {
+    this.api = axios.create({
+      baseURL: `${API_CONFIG.BASE_URL}/${API_CONFIG.VERSION}`,
+      timeout: API_CONFIG.TIMEOUT,
+      headers: API_CONFIG.HEADERS,
     });
-    return response.data;
+
+    this.setupInterceptors();
   }
 
   /**
-   * Makes a POST request to the specified endpoint
-   * @param endpoint The API endpoint to call
-   * @param data The data to send in the request body
-   * @param config Optional axios request configuration
-   * @returns Promise resolving to the response data
+   * Set up request and response interceptors
    */
-  async post<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await apiClient.post<T>(endpoint, data, config);
-    return response.data;
+  private setupInterceptors(): void {
+    // Request interceptor for adding auth token
+    this.api.interceptors.request.use(
+      async (config) => {
+        // Add authentication token if available
+        const token = await storageService.getAuthToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
+    // Response interceptor for handling common errors and token refresh
+    this.api.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        const originalRequest = error.config;
+        
+        // Handle 401 Unauthorized errors (token expired)
+        if (error.response?.status === 401 && originalRequest && !originalRequest.headers._retry) {
+          if (!this.isRefreshing) {
+            this.isRefreshing = true;
+            
+            try {
+              // Attempt to refresh the token
+              const refreshToken = await storageService.getRefreshToken();
+              if (!refreshToken) {
+                // No refresh token available, reject the request
+                await this.handleAuthError();
+                return Promise.reject(error);
+              }
+              
+              // Call refresh token API
+              const response = await axios.post(
+                `${API_CONFIG.BASE_URL}/${API_CONFIG.VERSION}${API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN}`,
+                { refreshToken }
+              );
+              
+              const { accessToken, refreshToken: newRefreshToken } = response.data;
+              
+              // Store new tokens
+              await storageService.setAuthToken(accessToken);
+              await storageService.setRefreshToken(newRefreshToken);
+              
+              // Update authorization header
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+              originalRequest.headers._retry = true;
+              
+              // Execute all pending requests with new token
+              this.onRefreshed(accessToken);
+              
+              // Reset refreshing state
+              this.isRefreshing = false;
+              
+              // Retry the original request
+              return this.api(originalRequest);
+            } catch (refreshError) {
+              // Token refresh failed, handle auth error
+              this.isRefreshing = false;
+              await this.handleAuthError();
+              return Promise.reject(refreshError);
+            }
+          } else {
+            // Add request to queue
+            return new Promise((resolve) => {
+              this.addRefreshSubscriber((token: string) => {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                originalRequest.headers._retry = true;
+                resolve(this.api(originalRequest));
+              });
+            });
+          }
+        }
+        
+        // Handle other error types
+        return Promise.reject(this.handleApiError(error));
+      }
+    );
   }
 
   /**
-   * Makes a PUT request to the specified endpoint
-   * @param endpoint The API endpoint to call
-   * @param data The data to send in the request body
-   * @param config Optional axios request configuration
-   * @returns Promise resolving to the response data
+   * Add a callback to be executed when token is refreshed
    */
-  async put<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await apiClient.put<T>(endpoint, data, config);
-    return response.data;
+  private addRefreshSubscriber(callback: (token: string) => void): void {
+    this.refreshSubscribers.push(callback);
   }
 
   /**
-   * Makes a PATCH request to the specified endpoint
-   * @param endpoint The API endpoint to call
-   * @param data The data to send in the request body
-   * @param config Optional axios request configuration
-   * @returns Promise resolving to the response data
+   * Execute all refresh subscribers with new token
    */
-  async patch<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await apiClient.patch<T>(endpoint, data, config);
-    return response.data;
+  private onRefreshed(token: string): void {
+    this.refreshSubscribers.forEach((callback) => callback(token));
+    this.refreshSubscribers = [];
   }
 
   /**
-   * Makes a DELETE request to the specified endpoint
-   * @param endpoint The API endpoint to call
-   * @param config Optional axios request configuration
-   * @returns Promise resolving to the response data
+   * Handle authentication errors
    */
-  async delete<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await apiClient.delete<T>(endpoint, config);
-    return response.data;
+  private async handleAuthError(): Promise<void> {
+    // Clear authentication data
+    await storageService.clearAuthData();
+    
+    // Add implementation for redirecting to login or showing auth error
+    // This will depend on how navigation is handled in the app
+  }
+
+  /**
+   * Format API errors into a consistent structure
+   */
+  private handleApiError(error: AxiosError): Error {
+    if (error.response) {
+      // Server responded with error status
+      const { status, data } = error.response;
+      const message = 
+        data.message || 
+        data.error || 
+        `Server error: ${status}`;
+      
+      const formattedError = new Error(message);
+      (formattedError as any).status = status;
+      (formattedError as any).data = data;
+      
+      return formattedError;
+    } else if (error.request) {
+      // Request was made but no response received
+      return new Error('Network error: No response received from server');
+    } else {
+      // Error in setting up the request
+      return new Error(`Request error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Make a GET request
+   * 
+   * @param url API endpoint
+   * @param params URL parameters
+   * @param config Additional axios config
+   * @returns Promise with response data
+   */
+  async get<T>(url: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
+    try {
+      const response: AxiosResponse<T> = await this.api.get(url, { 
+        params,
+        ...config 
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Make a POST request
+   * 
+   * @param url API endpoint
+   * @param data Request body
+   * @param config Additional axios config
+   * @returns Promise with response data
+   */
+  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    try {
+      const response: AxiosResponse<T> = await this.api.post(url, data, config);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Make a PUT request
+   * 
+   * @param url API endpoint
+   * @param data Request body
+   * @param config Additional axios config
+   * @returns Promise with response data
+   */
+  async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    try {
+      const response: AxiosResponse<T> = await this.api.put(url, data, config);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Make a PATCH request
+   * 
+   * @param url API endpoint
+   * @param data Request body
+   * @param config Additional axios config
+   * @returns Promise with response data
+   */
+  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    try {
+      const response: AxiosResponse<T> = await this.api.patch(url, data, config);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Make a DELETE request
+   * 
+   * @param url API endpoint
+   * @param config Additional axios config
+   * @returns Promise with response data
+   */
+  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    try {
+      const response: AxiosResponse<T> = await this.api.delete(url, config);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Download a file
+   * 
+   * @param url API endpoint
+   * @param filename Name to save the file as
+   * @param config Additional axios config
+   * @returns Promise with saved file path
+   */
+  async downloadFile(url: string, filename: string, config?: AxiosRequestConfig): Promise<string> {
+    try {
+      const response = await this.api.get(url, {
+        ...config,
+        responseType: 'blob',
+      });
+      
+      // Implementation will depend on the file system approach
+      // For React Native, we'd typically use react-native-fs or expo-file-system
+      // This is a placeholder for the implementation
+      console.log('File downloaded, size:', response.data.size);
+      
+      return `Downloaded: ${filename}`;
+    } catch (error) {
+      throw error;
+    }
   }
 }
 

@@ -1,56 +1,42 @@
 /**
- * Drama Models
+ * Drama Types
  * 
- * Type definitions for drama series and episodes.
+ * Contains all types and interfaces related to drama series and episodes.
  */
 
 /**
- * User Type
- * 
- * Represents a user in the system.
- */
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  displayName: string | null;
-  profilePicture: string | null;
-  bio: string | null;
-  createdAt: string;
-  isAdmin: boolean;
-  coinBalance: number;
-}
-
-/**
- * Drama Series Type
- * 
- * Represents a drama series in the app.
+ * Drama Series Interface
+ * Represents a drama series in the system
  */
 export interface DramaSeries {
   id: number;
   title: string;
   description: string;
   coverImage: string;
+  thumbnailImage: string;
   bannerImage: string | null;
   genre: string[];
   releaseYear: number;
-  director: string;
-  cast: string[];
-  totalEpisodes: number;
-  averageRating: number;
-  isComplete: boolean;
   country: string;
   language: string;
-  createdAt: string;
-  updatedAt: string;
+  director: string;
+  cast: string[];
+  averageRating: number | null;
+  ratingCount: number;
+  episodeCount: number;
+  totalDuration: number; // in minutes
+  isPremium: boolean;
+  isCompleted: boolean;
+  isComingSoon: boolean;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
   viewCount: number;
   tags: string[];
 }
 
 /**
- * Episode Type
- * 
- * Represents an episode within a drama series.
+ * Episode Interface
+ * Represents an episode of a drama series
  */
 export interface Episode {
   id: number;
@@ -58,154 +44,136 @@ export interface Episode {
   title: string;
   description: string;
   thumbnailImage: string;
-  duration: number;
-  videoUrl: string;
   episodeNumber: number;
-  releaseDate: string;
-  isFree: boolean;
+  seasonNumber: number;
+  duration: number; // in minutes
+  videoUrl: string;
+  streamingUrl: string | null; // URL for streaming
+  downloadUrl: string | null; // URL for downloading (premium feature)
+  releaseDate: string; // ISO date string
+  isPremium: boolean;
+  isFree: boolean; // First few episodes might be free even in premium series
+  isAvailable: boolean; // Might be temporarily unavailable
   viewCount: number;
-  createdAt: string;
-  updatedAt: string;
+  subtitles: Subtitle[];
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
 }
 
 /**
- * Watchlist Type
- * 
- * Represents a user's watchlist entry.
+ * Subtitle Interface
+ * Represents subtitle tracks for episodes
  */
-export interface Watchlist {
+export interface Subtitle {
   id: number;
-  userId: number;
-  seriesId: number;
-  addedAt: string;
-  series?: DramaSeries;
+  episodeId: number;
+  language: string;
+  url: string; // URL to subtitle file (WebVTT format)
+  isDefault: boolean;
 }
 
 /**
- * Watch History Type
- * 
- * Represents a user's watch history entry.
+ * Watch History Interface
+ * Represents a user's watch history entry
  */
 export interface WatchHistory {
   id: number;
   userId: number;
   episodeId: number;
   seriesId: number;
-  watchedAt: string;
-  progress: number;
+  watchedAt: string; // ISO date string
+  progress: number; // Percentage watched (0-100)
   completed: boolean;
-  episode?: Episode;
-  series?: DramaSeries;
+  duration: number; // How long they watched in seconds
 }
 
 /**
- * Rating Type
- * 
- * Represents a user's rating for a drama series.
+ * Watchlist Interface
+ * Represents a series in a user's watchlist
+ */
+export interface Watchlist {
+  id: number;
+  userId: number;
+  seriesId: number;
+  addedAt: string; // ISO date string
+  position?: number; // Optional ordering position
+}
+
+/**
+ * Rating Interface
+ * Represents a user's rating for a series
  */
 export interface Rating {
   id: number;
   userId: number;
   seriesId: number;
-  rating: number;
-  comment: string | null;
-  createdAt: string;
-  updatedAt: string;
-  user?: Pick<User, 'id' | 'username' | 'profilePicture'>;
+  rating: number; // 1-5 stars
+  review: string | null;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
+  likeCount: number;
+  dislikeCount: number;
 }
 
 /**
- * Transaction Type
- * 
- * Represents a financial transaction in the system.
+ * Comment Interface
+ * Represents a user's comment on an episode
  */
-export interface Transaction {
+export interface Comment {
   id: number;
   userId: number;
-  amount: number;
-  type: 'PURCHASE' | 'REFUND' | 'DEPOSIT' | 'WITHDRAWAL';
-  status: 'PENDING' | 'COMPLETED' | 'FAILED';
-  description: string;
-  referenceId: string | null;
-  createdAt: string;
+  episodeId: number;
+  content: string;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
+  likeCount: number;
+  dislikeCount: number;
+  parentId: number | null; // For replies, references parent comment
 }
 
 /**
- * Advertisement Type
- * 
- * Represents an advertisement in the system.
+ * Download Interface
+ * Represents a downloaded episode on the device
  */
-export interface Advertisement {
+export interface Download {
   id: number;
-  title: string;
-  description: string | null;
-  imageUrl: string;
-  targetUrl: string;
-  placement: string;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  impressions: number;
-  clicks: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Analytics Data Type
- * 
- * Represents analytics data for a time period.
- */
-export interface AnalyticsData {
-  period: string;
-  viewCount: number;
-  uniqueUsers: number;
-  watchTime: number;
-  completionRate: number;
-}
-
-/**
- * Series Analytics Type
- * 
- * Analytics data specific to a series.
- */
-export interface SeriesAnalytics {
+  episodeId: number;
   seriesId: number;
   title: string;
-  viewCount: number;
-  uniqueViewers: number;
-  averageWatchTime: number;
-  completionRate: number;
-  timeData: AnalyticsData[];
+  fileSize: number; // in bytes
+  filePath: string; // Local file path
+  thumbnailPath: string | null; // Local thumbnail path
+  downloadedAt: string; // ISO date string
+  expiresAt: string | null; // ISO date string, might have expiration for some content
+  quality: 'standard' | 'high';
+  isCompleted: boolean;
+  progress: number; // Download progress (0-100)
 }
 
 /**
- * User Analytics Type
- * 
- * Analytics data specific to user engagement.
+ * Genre Interface
+ * Represents a content genre
  */
-export interface UserAnalytics {
-  totalUsers: number;
-  activeUsers: number;
-  newUsers: number;
-  churned: number;
-  engagementRate: number;
-  timeData: AnalyticsData[];
+export interface Genre {
+  id: number;
+  name: string;
+  description: string;
+  coverImage: string | null;
+  seriesCount: number;
 }
 
 /**
- * Revenue Analytics Type
- * 
- * Analytics data specific to revenue.
+ * Content Filter Interface
+ * For filtering drama series
  */
-export interface RevenueAnalytics {
-  totalRevenue: number;
-  subscriptionRevenue: number;
-  episodePurchases: number;
-  adRevenue: number;
-  timeData: {
-    period: string;
-    revenue: number;
-    transactions: number;
-  }[];
+export interface ContentFilter {
+  genre?: string[];
+  country?: string[];
+  language?: string[];
+  releaseYear?: number[];
+  isPremium?: boolean;
+  isCompleted?: boolean;
+  minRating?: number;
+  sortBy?: 'popularity' | 'rating' | 'newest' | 'oldest';
+  searchQuery?: string;
 }
