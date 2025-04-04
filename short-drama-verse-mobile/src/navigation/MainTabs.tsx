@@ -1,130 +1,186 @@
 /**
- * Main Tab Navigator for ShortDramaVerse Mobile
+ * Main Tab Navigator
  * 
- * This component manages the bottom tab navigation structure
- * of the main application flow.
+ * Bottom tab navigation component for the main app screens
  */
-
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useTheme } from '@react-navigation/native';
-import { View, StyleSheet, Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { useTheme } from 'react-native-paper';
+import { 
+  StyleSheet,
+  Text,
+  View,
+  Platform,
+} from 'react-native';
+import { colors, spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { 
+  Home,
+  Search,
+  List,
+  User,
+  BarChart,
+} from 'lucide-react-native';
 
-// Screens
 import HomeScreen from '@/screens/home/HomeScreen';
-import ExploreScreen from '@/screens/explore/ExploreScreen';
+import SearchScreen from '@/screens/search/SearchScreen';
 import WatchlistScreen from '@/screens/watchlist/WatchlistScreen';
-import DownloadsScreen from '@/screens/downloads/DownloadsScreen';
 import ProfileScreen from '@/screens/profile/ProfileScreen';
+import AdminDashboardScreen from '@/screens/admin/AdminDashboardScreen';
 
-// Types
-import { MainTabsParamList } from '@/types/navigation';
+// Define the main tab parameter list
+export type MainTabParamList = {
+  Home: undefined;
+  Search: undefined;
+  Watchlist: undefined;
+  Profile: undefined;
+  Admin: undefined;
+};
 
 // Create the bottom tab navigator
-const Tab = createBottomTabNavigator<MainTabsParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 /**
  * Main Tabs Component
  * 
- * Manages the bottom tab navigation for the main app screens.
- * 
- * @returns Main tabs navigator component
+ * @returns Main tab navigation JSX
  */
-const MainTabs: React.FC = () => {
+const MainTabs = () => {
   const theme = useTheme();
   const { user } = useAuth();
+  
+  // Check if user is admin
+  const isAdmin = user?.isAdmin || false;
   
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#FF6B6B',
-        tabBarInactiveTintColor: '#777777',
-        tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: '#EEEEEE',
-          paddingBottom: Platform.OS === 'android' ? 8 : 25,
-          paddingTop: 8,
-          height: Platform.OS === 'android' ? 60 : 80,
-        },
+        tabBarStyle: styles.tabBar,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.gray,
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarItemStyle: styles.tabBarItem,
         tabBarShowLabel: true,
-        tabBarLabelStyle: {
-          fontSize: 12,
-          marginTop: -5,
-        },
+        tabBarHideOnKeyboard: true,
       }}
     >
+      {/* Home Tab */}
       <Tab.Screen
         name="Home"
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="home" color={color} size={size} />
+            <View style={styles.tabIconContainer}>
+              <Home
+                width={size}
+                height={size}
+                color={color}
+                strokeWidth={2}
+              />
+            </View>
           ),
         }}
       />
       
+      {/* Search Tab */}
       <Tab.Screen
-        name="Explore"
-        component={ExploreScreen}
+        name="Search"
+        component={SearchScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="explore" color={color} size={size} />
+            <View style={styles.tabIconContainer}>
+              <Search
+                width={size}
+                height={size}
+                color={color}
+                strokeWidth={2}
+              />
+            </View>
           ),
         }}
       />
       
+      {/* Watchlist Tab */}
       <Tab.Screen
         name="Watchlist"
         component={WatchlistScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="bookmark" color={color} size={size} />
+            <View style={styles.tabIconContainer}>
+              <List
+                width={size}
+                height={size}
+                color={color}
+                strokeWidth={2}
+              />
+            </View>
           ),
         }}
       />
       
-      <Tab.Screen
-        name="Downloads"
-        component={DownloadsScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="file-download" color={color} size={size} />
-          ),
-        }}
-      />
-      
+      {/* Profile Tab */}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <View>
-              {user?.isAdmin && (
-                <View style={styles.adminBadge} />
-              )}
-              <MaterialIcons name="person" color={color} size={size} />
+            <View style={styles.tabIconContainer}>
+              <User
+                width={size}
+                height={size}
+                color={color}
+                strokeWidth={2}
+              />
             </View>
           ),
         }}
       />
+      
+      {/* Admin Tab - Only visible for admin users */}
+      {isAdmin && (
+        <Tab.Screen
+          name="Admin"
+          component={AdminDashboardScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <View style={styles.tabIconContainer}>
+                <BarChart
+                  width={size}
+                  height={size}
+                  color={color}
+                  strokeWidth={2}
+                />
+              </View>
+            ),
+          }}
+        />
+      )}
     </Tab.Navigator>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
-  adminBadge: {
-    position: 'absolute',
-    right: -4,
-    top: -4,
-    backgroundColor: '#FF6B6B',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    zIndex: 1,
+  tabBar: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.lightGray,
+    paddingTop: spacing.xs,
+    paddingBottom: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    height: Platform.OS === 'ios' ? 85 : 70,
+  },
+  tabBarItem: {
+    paddingTop: spacing.xs,
+  },
+  tabBarLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: Platform.OS === 'ios' ? spacing.xs : 0,
+  },
+  tabIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

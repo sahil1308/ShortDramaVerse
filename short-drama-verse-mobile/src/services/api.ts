@@ -1,356 +1,202 @@
 /**
- * API Service for ShortDramaVerse Mobile
+ * API Service
  * 
- * This service handles all API communication including
- * authentication, request interceptors, and error handling.
+ * This service handles all API communication with the backend server.
+ * It provides methods for making HTTP requests and handling responses.
  */
-
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Platform } from 'react-native';
-import { StorageKey } from './storage';
-
-// Base API configuration
-const API_BASE_URL = 'https://shortdramaverse-api.example.com';
-const API_TIMEOUT = 15000; // 15 seconds
+import { API_CONFIG } from '@/constants/config';
+import { storageService } from './storage';
 
 /**
- * API Service class for handling all API communication
+ * APIError class to standardize error handling across the app
  */
-class ApiService {
-  private api: AxiosInstance;
-  private authToken: string | null = null;
-  private refreshToken: string | null = null;
-  private isRefreshing: boolean = false;
-  private refreshSubscribers: Array<(token: string) => void> = [];
+export class APIError extends Error {
+  status: number;
+  data?: any;
 
-  constructor() {
-    this.api = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: API_TIMEOUT,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Platform': Platform.OS,
-        'X-App-Version': process.env.APP_VERSION || '1.0.0',
-      },
-    });
-
-    // Initialize request interceptor
-    this.api.interceptors.request.use(
-      this.handleRequest.bind(this),
-      this.handleRequestError.bind(this),
-    );
-
-    // Initialize response interceptor
-    this.api.interceptors.response.use(
-      this.handleResponse.bind(this),
-      this.handleResponseError.bind(this),
-    );
-
-    // Load authentication tokens from storage
-    this.loadAuthTokens();
-  }
-
-  /**
-   * Load authentication tokens from storage
-   */
-  private async loadAuthTokens(): Promise<void> {
-    try {
-      this.authToken = await AsyncStorage.getItem(StorageKey.AUTH_TOKEN);
-      this.refreshToken = await AsyncStorage.getItem(StorageKey.REFRESH_TOKEN);
-    } catch (error) {
-      console.error('Error loading auth tokens:', error);
-    }
-  }
-
-  /**
-   * Handle API request config
-   */
-  private handleRequest(config: AxiosRequestConfig): AxiosRequestConfig {
-    // Add authentication token to request if available
-    if (this.authToken) {
-      config.headers = {
-        ...config.headers,
-        'Authorization': `Bearer ${this.authToken}`,
-      };
-    }
-    return config;
-  }
-
-  /**
-   * Handle API request error
-   */
-  private handleRequestError(error: any): Promise<any> {
-    console.error('Request error:', error);
-    return Promise.reject(error);
-  }
-
-  /**
-   * Handle API response
-   */
-  private handleResponse(response: any): AxiosResponse {
-    return response;
-  }
-
-  /**
-   * Handle API response error
-   */
-  private async handleResponseError(error: any): Promise<any> {
-    const originalRequest = error.config;
-    
-    // Handle token expiration
-    if (error.response?.status === 401 &&
-        !originalRequest._retry &&
-        this.refreshToken) {
-      
-      if (this.isRefreshing) {
-        // Wait for the refresh to complete and retry
-        return new Promise((resolve) => {
-          this.refreshSubscribers.push((token: string) => {
-            originalRequest.headers['Authorization'] = `Bearer ${token}`;
-            resolve(this.api(originalRequest));
-          });
-        });
-      }
-      
-      originalRequest._retry = true;
-      this.isRefreshing = true;
-      
-      try {
-        // Attempt to refresh the token
-        const response = await axios.post(
-          `${API_BASE_URL}/auth/refresh-token`,
-          { refreshToken: this.refreshToken },
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-        
-        const { token, refreshToken } = response.data;
-        
-        // Store new tokens
-        await this.setAuthToken(token, refreshToken);
-        
-        // Notify subscribers
-        this.refreshSubscribers.forEach(callback => callback(token));
-        this.refreshSubscribers = [];
-        
-        // Retry original request
-        originalRequest.headers['Authorization'] = `Bearer ${token}`;
-        return this.api(originalRequest);
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        
-        // Clear tokens and force logout
-        await this.clearAuthToken();
-        
-        // Navigate to auth screen
-        // This would typically be handled by the auth context
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please log in again.'
-        );
-        
-        return Promise.reject(refreshError);
-      } finally {
-        this.isRefreshing = false;
-      }
-    }
-    
-    // Parse error message
-    let errorMessage = 'An unexpected error occurred';
-    
-    if (error.response) {
-      // Server responded with error status
-      const serverError = error.response.data;
-      errorMessage = serverError.message || serverError.error || error.response.statusText;
-    } else if (error.request) {
-      // Request made but no response received
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Request timed out. Please check your internet connection and try again.';
-      } else {
-        errorMessage = 'Unable to connect to server. Please check your internet connection.';
-      }
-    }
-    
-    // Create error with proper message
-    const apiError = new Error(errorMessage);
-    
-    // Add response data for debugging
-    (apiError as any).response = error.response;
-    (apiError as any).request = error.request;
-    (apiError as any).status = error.response?.status;
-    
-    return Promise.reject(apiError);
-  }
-
-  /**
-   * Set authentication token
-   * 
-   * @param token - Authentication token
-   * @param refreshToken - Refresh token
-   */
-  public async setAuthToken(token: string, refreshToken: string): Promise<void> {
-    this.authToken = token;
-    this.refreshToken = refreshToken;
-    
-    try {
-      await AsyncStorage.setItem(StorageKey.AUTH_TOKEN, token);
-      await AsyncStorage.setItem(StorageKey.REFRESH_TOKEN, refreshToken);
-    } catch (error) {
-      console.error('Error storing auth tokens:', error);
-      throw new Error('Failed to store authentication tokens');
-    }
-  }
-
-  /**
-   * Clear authentication token
-   */
-  public async clearAuthToken(): Promise<void> {
-    this.authToken = null;
-    this.refreshToken = null;
-    
-    try {
-      await AsyncStorage.removeItem(StorageKey.AUTH_TOKEN);
-      await AsyncStorage.removeItem(StorageKey.REFRESH_TOKEN);
-    } catch (error) {
-      console.error('Error removing auth tokens:', error);
-      throw new Error('Failed to remove authentication tokens');
-    }
-  }
-
-  /**
-   * Check if user is authenticated
-   */
-  public isAuthenticated(): boolean {
-    return !!this.authToken;
-  }
-
-  /**
-   * Perform GET request
-   * 
-   * @param path - API path
-   * @param params - Query parameters
-   * @returns Response data
-   */
-  public async get<T>(path: string, params?: any): Promise<T> {
-    try {
-      const response = await this.api.get<T>(path, { params });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Perform POST request
-   * 
-   * @param path - API path
-   * @param data - Request body
-   * @returns Response data
-   */
-  public async post<T>(path: string, data?: any): Promise<T> {
-    try {
-      const response = await this.api.post<T>(path, data);
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Perform PUT request
-   * 
-   * @param path - API path
-   * @param data - Request body
-   * @returns Response data
-   */
-  public async put<T>(path: string, data?: any): Promise<T> {
-    try {
-      const response = await this.api.put<T>(path, data);
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Perform PATCH request
-   * 
-   * @param path - API path
-   * @param data - Request body
-   * @returns Response data
-   */
-  public async patch<T>(path: string, data?: any): Promise<T> {
-    try {
-      const response = await this.api.patch<T>(path, data);
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Perform DELETE request
-   * 
-   * @param path - API path
-   * @param params - Query parameters
-   * @returns Response data
-   */
-  public async delete<T>(path: string, params?: any): Promise<T> {
-    try {
-      const response = await this.api.delete<T>(path, { params });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Upload file
-   * 
-   * @param path - API path
-   * @param fileUri - URI of file to upload
-   * @param fileField - Name of file field
-   * @param mimeType - MIME type of file
-   * @param extraData - Additional form data
-   * @returns Response data
-   */
-  public async uploadFile<T>(
-    path: string,
-    fileUri: string,
-    fileField: string = 'file',
-    mimeType: string = 'application/octet-stream',
-    extraData: { [key: string]: string } = {}
-  ): Promise<T> {
-    try {
-      // Create form data
-      const formData = new FormData();
-      
-      // Add file
-      formData.append(fileField, {
-        uri: fileUri,
-        name: fileUri.split('/').pop() || 'file',
-        type: mimeType,
-      } as any);
-      
-      // Add extra data
-      Object.keys(extraData).forEach(key => {
-        formData.append(key, extraData[key]);
-      });
-      
-      // Upload file
-      const response = await this.api.post<T>(path, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
+  constructor(message: string, status: number = 500, data?: any) {
+    super(message);
+    this.name = 'APIError';
+    this.status = status;
+    this.data = data;
   }
 }
 
-// Export as singleton
-export default new ApiService();
+/**
+ * Axios instance with base configuration
+ */
+const apiClient: AxiosInstance = axios.create({
+  baseURL: `${API_CONFIG.BASE_URL}/${API_CONFIG.VERSION}`,
+  timeout: API_CONFIG.TIMEOUT,
+  headers: API_CONFIG.HEADERS,
+});
+
+/**
+ * Request interceptor
+ * - Adds authorization header if token exists
+ * - Handles request configuration
+ */
+apiClient.interceptors.request.use(
+  async (config) => {
+    const token = await storageService.getAuthToken();
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(new APIError('Request configuration error', 0, error));
+  }
+);
+
+/**
+ * Response interceptor
+ * - Handles successful responses
+ * - Handles error responses with standardized error handling
+ */
+apiClient.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error: AxiosError) => {
+    if (!error.response) {
+      // Network or connection error
+      return Promise.reject(
+        new APIError('Network error, please check your connection', 0)
+      );
+    }
+
+    const { status, data } = error.response;
+
+    // Handle token expiration
+    if (status === 401) {
+      try {
+        const refreshed = await refreshToken();
+        if (refreshed && error.config) {
+          // Retry the original request with new token
+          return apiClient(error.config);
+        }
+      } catch (refreshError) {
+        // If refresh token fails, redirect to login
+        await storageService.clearAuthData();
+        return Promise.reject(
+          new APIError('Session expired, please login again', 401)
+        );
+      }
+    }
+
+    // Handle other errors
+    let message = 'An unexpected error occurred';
+    if (typeof data === 'object' && data !== null && 'message' in data) {
+      message = data.message as string;
+    } else if (typeof data === 'string') {
+      message = data;
+    }
+
+    return Promise.reject(new APIError(message, status, data));
+  }
+);
+
+/**
+ * Refreshes the authentication token
+ * @returns {Promise<boolean>} True if token refresh was successful
+ */
+async function refreshToken(): Promise<boolean> {
+  try {
+    const refreshToken = await storageService.getRefreshToken();
+    
+    if (!refreshToken) {
+      return false;
+    }
+    
+    const response = await axios.post(
+      `${API_CONFIG.BASE_URL}/${API_CONFIG.VERSION}${API_CONFIG.ENDPOINTS.AUTH.REFRESH_TOKEN}`,
+      { refreshToken }
+    );
+    
+    if (response.data.token) {
+      await storageService.setAuthToken(response.data.token);
+      if (response.data.refreshToken) {
+        await storageService.setRefreshToken(response.data.refreshToken);
+      }
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Token refresh failed:', error);
+    return false;
+  }
+}
+
+/**
+ * API Service for making HTTP requests
+ */
+class ApiService {
+  /**
+   * Makes a GET request to the specified endpoint
+   * @param endpoint The API endpoint to call
+   * @param params Optional query parameters
+   * @param config Optional axios request configuration
+   * @returns Promise resolving to the response data
+   */
+  async get<T>(endpoint: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await apiClient.get<T>(endpoint, {
+      ...config,
+      params,
+    });
+    return response.data;
+  }
+
+  /**
+   * Makes a POST request to the specified endpoint
+   * @param endpoint The API endpoint to call
+   * @param data The data to send in the request body
+   * @param config Optional axios request configuration
+   * @returns Promise resolving to the response data
+   */
+  async post<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await apiClient.post<T>(endpoint, data, config);
+    return response.data;
+  }
+
+  /**
+   * Makes a PUT request to the specified endpoint
+   * @param endpoint The API endpoint to call
+   * @param data The data to send in the request body
+   * @param config Optional axios request configuration
+   * @returns Promise resolving to the response data
+   */
+  async put<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await apiClient.put<T>(endpoint, data, config);
+    return response.data;
+  }
+
+  /**
+   * Makes a PATCH request to the specified endpoint
+   * @param endpoint The API endpoint to call
+   * @param data The data to send in the request body
+   * @param config Optional axios request configuration
+   * @returns Promise resolving to the response data
+   */
+  async patch<T>(endpoint: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await apiClient.patch<T>(endpoint, data, config);
+    return response.data;
+  }
+
+  /**
+   * Makes a DELETE request to the specified endpoint
+   * @param endpoint The API endpoint to call
+   * @param config Optional axios request configuration
+   * @returns Promise resolving to the response data
+   */
+  async delete<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await apiClient.delete<T>(endpoint, config);
+    return response.data;
+  }
+}
+
+export const apiService = new ApiService();

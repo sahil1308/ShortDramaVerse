@@ -1,135 +1,64 @@
 /**
- * Navigation type definitions for ShortDramaVerse Mobile
+ * Navigation Types
  * 
- * This file contains types for navigation stacks, routes,
- * and screen parameters.
+ * Type definitions for React Navigation in the app.
+ * Defines the parameter lists for all navigators and screens.
  */
-
 import { NavigatorScreenParams } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { CompositeNavigationProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DramaSeries, Episode } from './drama';
 
-// Main navigation stacks
+/**
+ * Root Stack Navigation Parameters
+ * 
+ * Defines parameters for the top-level stack navigator.
+ */
 export type RootStackParamList = {
-  AuthStack: undefined;
-  MainTabs: NavigatorScreenParams<MainTabsParamList>;
-  SeriesStack: NavigatorScreenParams<SeriesStackParamList>;
-  ProfileStack: NavigatorScreenParams<ProfileStackParamList>;
-  AdminStack: NavigatorScreenParams<AdminStackParamList>;
-  Loading: undefined;
-  Onboarding: undefined;
+  Auth: undefined;
+  Main: NavigatorScreenParams<MainTabParamList>;
+  SeriesDetail: {
+    seriesId: number;
+    series?: DramaSeries;
+  };
+  Player: {
+    episodeId: number;
+    seriesId: number;
+    episode?: Episode;
+  };
 };
 
-// Authentication stack
+/**
+ * Main Tab Navigation Parameters
+ * 
+ * Defines parameters for the main tab navigator.
+ */
+export type MainTabParamList = {
+  Home: undefined;
+  Search: undefined;
+  Watchlist: undefined;
+  Profile: undefined;
+  Admin: undefined;
+};
+
+/**
+ * Auth Stack Navigation Parameters
+ * 
+ * Defines parameters for the authentication stack navigator.
+ */
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
-  VerifyEmail: { email: string };
-  ResetPassword: { token: string };
 };
 
-// Main tabs
-export type MainTabsParamList = {
-  Home: undefined;
-  Explore: undefined;
-  Watchlist: undefined;
-  Downloads: undefined;
-  Profile: undefined;
-};
-
-// Series stack
-export type SeriesStackParamList = {
-  SeriesList: undefined;
-  SeriesDetail: { 
-    seriesId: number;
-    title?: string;
-  };
-  EpisodePlayer: {
-    episodeId: number;
-    seriesId: number;
-    position?: number;
-  };
-  SeriesComments: { seriesId: number };
-  EpisodeComments: { episodeId: number };
-  RateSeries: { seriesId: number };
-};
-
-// Profile stack
-export type ProfileStackParamList = {
-  ProfileMain: undefined;
-  EditProfile: undefined;
-  WatchHistory: undefined;
-  Settings: undefined;
-  Subscriptions: undefined;
-  Transactions: undefined;
-  DownloadedContent: undefined;
-  HelpCenter: undefined;
-  Notifications: undefined;
-};
-
-// Admin stack
+/**
+ * Admin Stack Navigation Parameters
+ * 
+ * Defines parameters for the admin section stack navigator.
+ */
 export type AdminStackParamList = {
-  AdminDashboard: undefined;
+  Dashboard: undefined;
   ContentManagement: undefined;
-  UserManagement: {
-    userId?: number;
-  };
-  Analytics: {
-    seriesId?: number;
-    type?: 'content' | 'user' | 'overview';
-  };
-  Reports: undefined;
+  UserManagement: undefined;
+  Analytics: undefined;
   Settings: undefined;
 };
-
-// Combined navigation types for screens that need access to multiple stacks
-export type HomeScreenNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabsParamList, 'Home'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type SeriesDetailNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<SeriesStackParamList, 'SeriesDetail'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type EpisodePlayerNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<SeriesStackParamList, 'EpisodePlayer'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type ProfileNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabsParamList, 'Profile'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type WatchlistNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabsParamList, 'Watchlist'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type ExploreNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabsParamList, 'Explore'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type DownloadsNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabsParamList, 'Downloads'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type AdminDashboardNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<AdminStackParamList, 'AdminDashboard'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-// Screen props
-export type RootStackProps = NativeStackNavigationProp<RootStackParamList>;
-export type AuthStackProps = NativeStackNavigationProp<AuthStackParamList>;
-export type MainTabsProps = BottomTabNavigationProp<MainTabsParamList>;
-export type SeriesStackProps = NativeStackNavigationProp<SeriesStackParamList>;
-export type ProfileStackProps = NativeStackNavigationProp<ProfileStackParamList>;
-export type AdminStackProps = NativeStackNavigationProp<AdminStackParamList>;

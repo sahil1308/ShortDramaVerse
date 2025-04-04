@@ -1,38 +1,37 @@
-export default {
-  "expo": {
-    "name": "ShortDramaVerse",
-    "slug": "short-drama-verse-mobile",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1E293B"
+module.exports = {
+  name: "ShortDramaVerse",
+  slug: "short-drama-verse",
+  version: "1.0.0",
+  orientation: "portrait",
+  icon: "./src/assets/icon.png",
+  splash: {
+    image: "./src/assets/splash.png",
+    resizeMode: "contain",
+    backgroundColor: "#ffffff"
+  },
+  updates: {
+    fallbackToCacheTimeout: 0
+  },
+  assetBundlePatterns: [
+    "**/*"
+  ],
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: "com.shortdramaverse.app"
+  },
+  android: {
+    adaptiveIcon: {
+      foregroundImage: "./src/assets/adaptive-icon.png",
+      backgroundColor: "#FFFFFF"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.shortdramaverse"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1E293B"
-      },
-      "package": "com.yourcompany.shortdramaverse"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "apiUrl": "https://your-api-url.com"
-    },
-    "plugins": [
-      "expo-font"
-    ]
+    package: "com.shortdramaverse.app"
+  },
+  web: {
+    favicon: "./src/assets/favicon.png"
+  },
+  extra: {
+    eas: {
+      projectId: "short-drama-verse"
+    }
   }
-}
+};

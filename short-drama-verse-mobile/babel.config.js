@@ -6,24 +6,22 @@ module.exports = function(api) {
       [
         'module-resolver',
         {
-          root: ['./'],
+          root: ['./src'],
+          extensions: ['.ios.js', '.android.js', '.js', '.ts', '.tsx', '.json'],
           alias: {
             '@': './src',
-            '@assets': './assets',
             '@components': './src/components',
             '@screens': './src/screens',
             '@navigation': './src/navigation',
             '@hooks': './src/hooks',
             '@services': './src/services',
-            '@lib': './src/lib',
-            '@types': './src/types',
+            '@constants': './src/constants',
             '@utils': './src/utils',
-            '@constants': './src/constants'
+            '@assets': './src/assets',
+            '@types': './src/types',
           },
-          extensions: ['.js', '.jsx', '.ts', '.tsx']
-        }
+        },
       ],
-      'react-native-reanimated/plugin'
-    ]
+    ],
   };
 };

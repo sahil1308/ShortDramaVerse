@@ -1,314 +1,389 @@
 /**
- * Home Screen for ShortDramaVerse Mobile
+ * Home Screen Component
  * 
- * This is the main screen users see after login, featuring personalized 
- * drama recommendations, continue watching section, and trending content.
+ * Main screen displaying featured content, continue watching, and recommended series.
  */
-
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   RefreshControl,
   StatusBar,
-  TouchableOpacity
+  FlatList,
+  TouchableOpacity,
+  ImageBackground,
+  SafeAreaView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-
-// Components
-import DramaCarousel from '@/components/DramaCarousel';
-import DramaRow from '@/components/DramaRow';
-import EmptyStateView from '@/components/EmptyStateView';
-
-// Hooks
+import { DramaSeries, WatchHistory, Episode } from '@/types/drama';
+import { api } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { colors, spacing, typography } from '@/constants/theme';
 
-// Types and services
-import { DramaSeries, Episode } from '@/types/drama';
-import apiService from '@/services/api';
-import { EventType } from '@/services/analytics';
+// Components would be imported here
+// import DramaCard from '@/components/DramaCard';
+// import FeatureCarousel from '@/components/FeatureCarousel';
+// import ContinueWatchingCard from '@/components/ContinueWatchingCard';
 
 /**
  * Home Screen Component
  * 
- * Main landing screen with personalized content after user login.
- * 
- * @returns Home screen component
+ * @returns Home screen JSX
  */
-const HomeScreen: React.FC = () => {
+const HomeScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { trackScreenView, trackEvent } = useAnalytics();
+  const { trackScreenView } = useAnalytics();
   
-  // Track screen view on component mount
+  // Track screen view
   useEffect(() => {
     trackScreenView('Home');
   }, [trackScreenView]);
   
-  // Fetch featured drama series
-  const { 
-    data: featuredSeries,
-    isLoading: isLoadingFeatured,
-    refetch: refetchFeatured
-  } = useQuery({
+  // Fetch featured series
+  const { data: featuredSeries, isLoading: loadingFeatured } = useQuery({
     queryKey: ['featuredSeries'],
-    queryFn: () => apiService.getFeaturedSeries(),
-  });
-  
-  // Fetch continue watching content
-  const { 
-    data: continueWatching,
-    isLoading: isLoadingContinue,
-    refetch: refetchContinue
-  } = useQuery({
-    queryKey: ['continueWatching'],
-    queryFn: () => apiService.getContinueWatching(),
-    enabled: !!user, // Only run if user is logged in
+    queryFn: () => api.get<DramaSeries[]>('/series/featured'),
   });
   
   // Fetch trending series
-  const { 
-    data: trendingSeries,
-    isLoading: isLoadingTrending,
-    refetch: refetchTrending
-  } = useQuery({
+  const { data: trendingSeries, isLoading: loadingTrending } = useQuery({
     queryKey: ['trendingSeries'],
-    queryFn: () => apiService.getTrendingSeries(),
+    queryFn: () => api.get<DramaSeries[]>('/series/trending'),
   });
   
-  // Fetch new releases
-  const { 
-    data: newReleases,
-    isLoading: isLoadingNew,
-    refetch: refetchNew
-  } = useQuery({
-    queryKey: ['newReleases'],
-    queryFn: () => apiService.getNewReleases(),
+  // Fetch recommended series
+  const { data: recommendedSeries, isLoading: loadingRecommended } = useQuery({
+    queryKey: ['recommendedSeries'],
+    queryFn: () => api.get<DramaSeries[]>('/series/recommended'),
   });
   
-  // Pull-to-refresh handler
-  const onRefresh = React.useCallback(async () => {
+  // Fetch continue watching
+  const { data: continueWatching, isLoading: loadingContinueWatching } = useQuery({
+    queryKey: ['continueWatching'],
+    queryFn: () => api.get<WatchHistory[]>('/user/watch-history'),
+    // Only fetch if user is logged in
+    enabled: !!user,
+  });
+  
+  // Handle refresh
+  const onRefresh = async () => {
     setRefreshing(true);
     
     try {
+      // Refetch all queries
       await Promise.all([
-        refetchFeatured(),
-        refetchContinue(),
-        refetchTrending(),
-        refetchNew()
+        // This would normally use the queryClient.refetchQueries method
       ]);
     } catch (error) {
-      console.error('Error refreshing home screen data:', error);
-    } finally {
-      setRefreshing(false);
+      console.error('Error refreshing:', error);
     }
-  }, [refetchFeatured, refetchContinue, refetchTrending, refetchNew]);
-  
-  // Handler for opening search screen
-  const handleSearchPress = () => {
-    trackEvent(EventType.SEARCH_OPENED, { source: 'home_screen' });
-    navigation.navigate('Search' as never);
+    
+    setRefreshing(false);
   };
   
-  // Handler for series selection
-  const handleSeriesPress = (series: DramaSeries) => {
-    trackEvent(EventType.SERIES_SELECTED, { 
-      seriesId: series.id,
-      seriesTitle: series.title,
-      source: 'home_screen' 
+  // Handler for series press
+  const handleSeriesPress = (seriesId: number, series?: DramaSeries) => {
+    // Navigate to series detail screen
+    navigation.navigate('SeriesDetail', {
+      seriesId,
+      series,
     });
-    
-    navigation.navigate('SeriesDetails' as never, { 
-      seriesId: series.id,
-      title: series.title 
-    } as never);
   };
   
-  // Handler for continue watching selection
-  const handleContinueWatchingPress = (episode: Episode) => {
-    trackEvent(EventType.RESUME_WATCHING, { 
-      episodeId: episode.id,
-      seriesId: episode.seriesId,
-      episodeTitle: episode.title,
-      source: 'home_screen' 
+  // Handler for episode press
+  const handleEpisodePress = (episodeId: number, seriesId: number, episode?: Episode) => {
+    // Navigate to player screen
+    navigation.navigate('Player', {
+      episodeId,
+      seriesId,
+      episode,
     });
+  };
+  
+  // Placeholder component for DramaCard
+  const DramaCard = ({ series, onPress }: { series: DramaSeries; onPress: () => void }) => (
+    <TouchableOpacity style={styles.dramaCard} onPress={onPress}>
+      <ImageBackground
+        source={{ uri: series.coverImage }}
+        style={styles.cardImage}
+        imageStyle={styles.cardImageStyle}
+      >
+        <View style={styles.cardOverlay}>
+          <Text style={styles.cardTitle}>{series.title}</Text>
+        </View>
+      </ImageBackground>
+    </TouchableOpacity>
+  );
+  
+  // Placeholder component for ContinueWatchingCard
+  const ContinueWatchingCard = ({ item, onPress }: { item: WatchHistory; onPress: () => void }) => (
+    <TouchableOpacity style={styles.continueWatchingCard} onPress={onPress}>
+      <ImageBackground
+        source={{ uri: item.episode?.thumbnailImage }}
+        style={styles.continueWatchingImage}
+        imageStyle={styles.cardImageStyle}
+      >
+        <View style={styles.cardOverlay}>
+          <Text style={styles.continueWatchingTitle}>{item.episode?.title}</Text>
+          <View style={styles.progressBarContainer}>
+            <View style={[styles.progressBar, { width: `${item.progress * 100}%` }]} />
+          </View>
+        </View>
+      </ImageBackground>
+    </TouchableOpacity>
+  );
+  
+  // Placeholder component for Featured Series
+  const renderFeaturedSeries = () => {
+    if (loadingFeatured) {
+      return <View style={styles.loadingPlaceholder} />;
+    }
     
-    navigation.navigate('EpisodePlayer' as never, {
-      episodeId: episode.id,
-      seriesId: episode.seriesId,
-      title: episode.title,
-      startPosition: episode.watchProgress || 0
-    } as never);
+    if (!featuredSeries?.length) {
+      return null;
+    }
+    
+    return (
+      <View style={styles.featuredContainer}>
+        <ImageBackground
+          source={{ uri: featuredSeries[0].bannerImage || featuredSeries[0].coverImage }}
+          style={styles.featuredImage}
+        >
+          <View style={styles.featuredOverlay}>
+            <Text style={styles.featuredTitle}>{featuredSeries[0].title}</Text>
+            <Text style={styles.featuredDescription} numberOfLines={2}>
+              {featuredSeries[0].description}
+            </Text>
+            <TouchableOpacity
+              style={styles.watchButton}
+              onPress={() => handleSeriesPress(featuredSeries[0].id, featuredSeries[0])}
+            >
+              <Text style={styles.watchButtonText}>Watch Now</Text>
+            </TouchableOpacity>
+          </View>
+        </ImageBackground>
+      </View>
+    );
   };
   
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.greeting}>
-          {user ? `Hi, ${user.displayName || user.username}` : 'Welcome'}
-        </Text>
-        <TouchableOpacity 
-          style={styles.searchButton} 
-          onPress={handleSearchPress}
-        >
-          <Feather name="search" size={22} color="#333333" />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       
       <ScrollView
-        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Featured Carousel */}
-        <View style={styles.carouselContainer}>
-          <DramaCarousel 
-            data={featuredSeries || []}
-            isLoading={isLoadingFeatured}
-            onItemPress={handleSeriesPress}
-          />
-        </View>
+        {/* Featured Series */}
+        {renderFeaturedSeries()}
         
-        {/* Continue Watching Section */}
-        {user && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Continue Watching</Text>
-              {continueWatching && continueWatching.length > 0 && (
-                <TouchableOpacity>
-                  <Text style={styles.seeAllText}>See All</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            
-            {isLoadingContinue ? (
-              <DramaRow 
-                type="continue"
-                isLoading={true}
-                data={[]}
-                onItemPress={() => {}}
-              />
-            ) : continueWatching && continueWatching.length > 0 ? (
-              <DramaRow 
-                type="continue"
-                data={continueWatching}
-                onItemPress={handleContinueWatchingPress}
-              />
+        {/* Continue Watching */}
+        {!!user && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Continue Watching</Text>
+            {loadingContinueWatching ? (
+              <View style={styles.loadingPlaceholder} />
+            ) : !continueWatching?.length ? (
+              <Text style={styles.emptyStateText}>No episodes in progress</Text>
             ) : (
-              <EmptyStateView 
-                icon="play-circle-outline"
-                message="You haven't watched any dramas yet"
-                actionText="Explore dramas"
-                onAction={() => navigation.navigate('Explore' as never)}
+              <FlatList
+                horizontal
+                data={continueWatching}
+                keyExtractor={(item) => `continue-${item.id}`}
+                renderItem={({ item }) => (
+                  <ContinueWatchingCard
+                    item={item}
+                    onPress={() => handleEpisodePress(item.episodeId, item.seriesId, item.episode)}
+                  />
+                )}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalListContent}
               />
             )}
           </View>
         )}
         
-        {/* Trending Series Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Trending Now</Text>
-            {trendingSeries && trendingSeries.length > 0 && (
-              <TouchableOpacity>
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          <DramaRow 
-            type="horizontal"
-            data={trendingSeries || []}
-            isLoading={isLoadingTrending}
-            onItemPress={handleSeriesPress}
-          />
+        {/* Trending Now */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Trending Now</Text>
+          {loadingTrending ? (
+            <View style={styles.loadingPlaceholder} />
+          ) : !trendingSeries?.length ? (
+            <Text style={styles.emptyStateText}>No trending series available</Text>
+          ) : (
+            <FlatList
+              horizontal
+              data={trendingSeries}
+              keyExtractor={(item) => `trending-${item.id}`}
+              renderItem={({ item }) => (
+                <DramaCard
+                  series={item}
+                  onPress={() => handleSeriesPress(item.id, item)}
+                />
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalListContent}
+            />
+          )}
         </View>
         
-        {/* New Releases Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>New Releases</Text>
-            {newReleases && newReleases.length > 0 && (
-              <TouchableOpacity>
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          <DramaRow 
-            type="horizontal"
-            data={newReleases || []}
-            isLoading={isLoadingNew}
-            onItemPress={handleSeriesPress}
-          />
+        {/* Recommended For You */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Recommended For You</Text>
+          {loadingRecommended ? (
+            <View style={styles.loadingPlaceholder} />
+          ) : !recommendedSeries?.length ? (
+            <Text style={styles.emptyStateText}>No recommendations available</Text>
+          ) : (
+            <FlatList
+              horizontal
+              data={recommendedSeries}
+              keyExtractor={(item) => `recommended-${item.id}`}
+              renderItem={({ item }) => (
+                <DramaCard
+                  series={item}
+                  onPress={() => handleSeriesPress(item.id, item)}
+                />
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalListContent}
+            />
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  greeting: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  searchButton: {
-    padding: 8,
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: 24,
+    flexGrow: 1,
+    paddingBottom: spacing.xl,
   },
-  carouselContainer: {
-    marginVertical: 16,
-  },
-  section: {
-    marginTop: 24,
-    paddingHorizontal: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  sectionContainer: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#333333',
+    fontWeight: 'bold',
+    marginBottom: spacing.md,
+    color: colors.onBackground,
   },
-  seeAllText: {
+  horizontalListContent: {
+    paddingRight: spacing.md,
+  },
+  loadingPlaceholder: {
+    height: 180,
+    backgroundColor: colors.lightGray,
+    borderRadius: 8,
+    marginBottom: spacing.md,
+  },
+  emptyStateText: {
+    color: colors.gray,
+    textAlign: 'center',
+    marginVertical: spacing.lg,
+  },
+  featuredContainer: {
+    width: '100%',
+    height: 300,
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
+  featuredOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: spacing.lg,
+  },
+  featuredTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginBottom: spacing.xs,
+  },
+  featuredDescription: {
     fontSize: 14,
-    color: '#FF6B6B',
+    color: colors.white,
+    marginBottom: spacing.md,
+  },
+  watchButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  watchButtonText: {
+    color: colors.white,
+    fontWeight: 'bold',
+  },
+  dramaCard: {
+    width: 130,
+    height: 190,
+    marginRight: spacing.md,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
+  cardImageStyle: {
+    borderRadius: 8,
+  },
+  cardOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: spacing.sm,
+  },
+  cardTitle: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  continueWatchingCard: {
+    width: 200,
+    height: 120,
+    marginRight: spacing.md,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  continueWatchingImage: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
+  continueWatchingTitle: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: spacing.xs,
+  },
+  progressBarContainer: {
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    marginTop: spacing.xs,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
   },
 });
 

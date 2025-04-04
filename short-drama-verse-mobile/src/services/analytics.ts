@@ -1,375 +1,489 @@
 /**
- * Analytics Service for ShortDramaVerse Mobile
+ * Analytics Service
  * 
- * This service tracks user interactions and analytics data
- * for reporting and insight generation.
+ * Tracks user behavior and app usage for analytics purposes.
+ * Handles batching of analytics events and offline caching.
  */
+import { apiService } from './api';
+import { storageService } from './storage';
+import { API_CONFIG, APP_CONFIG } from '@/constants/config';
+import { AppState, Platform } from 'react-native';
+import { v4 as uuidv4 } from 'uuid';
+import DeviceInfo from 'react-native-device-info';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform, Dimensions } from 'react-native';
-import { StorageKey } from './storage';
-import api from './api';
-
-// Number of events to store before automatic sending
-const EVENT_BATCH_SIZE = 20;
-
-// Analytics event types enum
+// Analytics event types
 export enum AnalyticsEventType {
-  // App lifecycle events
   APP_OPEN = 'app_open',
   APP_CLOSE = 'app_close',
-  
-  // Screen view events
   SCREEN_VIEW = 'screen_view',
-  
-  // Video player events
-  VIDEO_PLAY = 'video_play',
-  VIDEO_PAUSE = 'video_pause',
-  VIDEO_SEEK = 'video_seek',
-  VIDEO_COMPLETE = 'video_complete',
-  VIDEO_PROGRESS = 'video_progress',
-  
-  // User interaction events
-  BUTTON_CLICK = 'button_click',
-  TAB_CHANGE = 'tab_change',
-  LIST_ITEM_CLICK = 'list_item_click',
-  
-  // Search events
-  SEARCH = 'search',
-  FILTER_CHANGE = 'filter_change',
-  
-  // User action events
   LOGIN = 'login',
   LOGOUT = 'logout',
   REGISTRATION = 'registration',
-  
-  // Content events
-  ADD_TO_WATCHLIST = 'add_to_watchlist',
-  REMOVE_FROM_WATCHLIST = 'remove_from_watchlist',
-  SHARE_CONTENT = 'share_content',
-  RATE_CONTENT = 'rate_content',
-  COMMENT = 'comment',
-  DOWNLOAD_START = 'download_start',
-  DOWNLOAD_COMPLETE = 'download_complete',
-  DOWNLOAD_ERROR = 'download_error',
-  
-  // Purchase events
-  PURCHASE_INITIATED = 'purchase_initiated',
-  PURCHASE_COMPLETED = 'purchase_completed',
-  PURCHASE_FAILED = 'purchase_failed',
-  SUBSCRIPTION_STARTED = 'subscription_started',
-  SUBSCRIPTION_RENEWED = 'subscription_renewed',
-  SUBSCRIPTION_CANCELLED = 'subscription_cancelled',
-  
-  // Error events
+  SERIES_VIEW = 'series_view',
+  EPISODE_START = 'episode_start',
+  EPISODE_PROGRESS = 'episode_progress',
+  EPISODE_COMPLETE = 'episode_complete',
+  EPISODE_LIKE = 'episode_like',
+  EPISODE_DISLIKE = 'episode_dislike',
+  EPISODE_SHARE = 'episode_share',
+  EPISODE_COMMENT = 'episode_comment',
+  EPISODE_DOWNLOAD = 'episode_download',
+  SEARCH = 'search',
+  WATCHLIST_ADD = 'watchlist_add',
+  WATCHLIST_REMOVE = 'watchlist_remove',
+  SUBSCRIPTION_VIEW = 'subscription_view',
+  SUBSCRIPTION_PURCHASE = 'subscription_purchase',
   ERROR = 'error',
 }
 
-// Analytics event interface
+// Interface for analytics events
 interface AnalyticsEvent {
   eventType: AnalyticsEventType;
   timestamp: number;
-  userId?: number;
-  sessionId: string;
-  data: Record<string, any>;
-  deviceInfo: DeviceInfo;
-}
-
-// Device information interface
-interface DeviceInfo {
+  userId?: string | null;
   deviceId: string;
+  sessionId: string;
+  properties: Record<string, any>;
   platform: string;
-  osVersion: string;
   appVersion: string;
-  deviceModel: string;
-  screenWidth: number;
-  screenHeight: number;
-  networkType?: string;
-  language: string;
-  timezone: string;
+  osVersion: string;
 }
 
 /**
- * Analytics Service class for tracking user interactions
- * and app usage for analytics and reporting
+ * Analytics Service
+ * 
+ * Provides methods for tracking user behavior and app usage.
  */
 class AnalyticsService {
-  private userId: number | null = null;
-  private sessionId: string;
-  private deviceInfo: DeviceInfo;
-  private eventQueue: AnalyticsEvent[] = [];
-  private isInitialized: boolean = false;
-  private isOffline: boolean = false;
-  private isSending: boolean = false;
-  
-  constructor() {
-    // Generate unique session ID
-    this.sessionId = this.generateSessionId();
-    
-    // Get device info
-    const { width, height } = Dimensions.get('window');
-    
-    this.deviceInfo = {
-      deviceId: 'unknown', // Will be set during initialization
-      platform: Platform.OS,
-      osVersion: Platform.Version.toString(),
-      appVersion: process.env.APP_VERSION || '1.0.0',
-      deviceModel: Platform.OS === 'ios' ? 'iPhone' : 'Android', // Simplified
-      screenWidth: width,
-      screenHeight: height,
-      language: 'en', // Default, will be updated later
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    };
-  }
-  
+  private _deviceId: string | null = null;
+  private _sessionId: string | null = null;
+  private _userId: string | null = null;
+  private _eventQueue: AnalyticsEvent[] = [];
+  private _isSending: boolean = false;
+  private _batchTimeoutId: NodeJS.Timeout | null = null;
+  private _initialized: boolean = false;
+  private _appVersion: string = '';
+  private _osVersion: string = '';
+  private _sessionStartTime: number = 0;
+  private _appState: 'active' | 'background' | 'inactive' = 'active';
+
   /**
-   * Initialize analytics service
+   * Initialize the analytics service
    */
-  public async initialize(): Promise<void> {
+  async initialize(): Promise<void> {
+    // Avoid multiple initializations
+    if (this._initialized) return;
+
     try {
-      // Check if device ID exists in storage
-      let deviceId = await AsyncStorage.getItem(StorageKey.DEVICE_ID);
+      // Get or generate device ID
+      this._deviceId = await this.getDeviceId();
       
-      if (!deviceId) {
-        // Generate new device ID
-        deviceId = this.generateDeviceId();
-        await AsyncStorage.setItem(StorageKey.DEVICE_ID, deviceId);
-      }
+      // Start a new session
+      this._sessionId = this.generateSessionId();
+      this._sessionStartTime = Date.now();
       
-      // Update device info
-      this.deviceInfo.deviceId = deviceId;
+      // Get user ID from storage if logged in
+      const user = await storageService.getUser();
+      this._userId = user?.id?.toString() || null;
       
-      // Load saved unsent events
-      const savedEvents = await AsyncStorage.getItem(StorageKey.ANALYTICS_EVENTS);
-      if (savedEvents) {
-        try {
-          this.eventQueue = JSON.parse(savedEvents);
-        } catch (error) {
-          console.error('Error parsing saved analytics events:', error);
-          this.eventQueue = [];
-        }
-      }
+      // Get device info
+      this._appVersion = await DeviceInfo.getVersion();
+      this._osVersion = await DeviceInfo.getSystemVersion();
       
-      // Mark as initialized
-      this.isInitialized = true;
+      // Load cached events from storage
+      await this.loadCachedEvents();
       
-      // Send any queued events
-      this.flushEvents();
+      // Start monitoring app state
+      this.setupAppStateListener();
+      
+      // Start batch sending
+      this.startBatching();
+      
+      // Track app open event
+      this.trackEvent(AnalyticsEventType.APP_OPEN, {});
+      
+      this._initialized = true;
       
       console.log('Analytics service initialized');
-      
     } catch (error) {
       console.error('Error initializing analytics service:', error);
     }
   }
-  
+
   /**
-   * Set user ID for analytics
-   * 
-   * @param userId - User ID to set
+   * Get device ID or generate if not exists
    */
-  public setUserId(userId: number | null): void {
-    this.userId = userId;
+  private async getDeviceId(): Promise<string> {
+    const storedDeviceId = await storageService.getDeviceId();
+    
+    if (storedDeviceId) {
+      return storedDeviceId;
+    }
+    
+    // Generate new device ID
+    const newDeviceId = uuidv4();
+    await storageService.setDeviceId(newDeviceId);
+    return newDeviceId;
   }
-  
+
   /**
-   * Set network status
-   * 
-   * @param isOffline - Whether device is offline
+   * Generate a unique session ID
    */
-  public setOfflineStatus(isOffline: boolean): void {
-    this.isOffline = isOffline;
+  private generateSessionId(): string {
+    return uuidv4();
   }
-  
+
   /**
-   * Track generic event
-   * 
-   * @param eventType - Type of event to track
-   * @param data - Additional event data
+   * Set up listener for app state changes
    */
-  public trackEvent(eventType: AnalyticsEventType, data: Record<string, any> = {}): void {
-    if (!this.isInitialized) {
-      console.warn('Analytics service not initialized');
+  private setupAppStateListener(): void {
+    AppState.addEventListener('change', this.handleAppStateChange.bind(this));
+  }
+
+  /**
+   * Handle app state changes
+   */
+  private handleAppStateChange(nextAppState: string): void {
+    // Track app close/background event
+    if (
+      this._appState === 'active' && 
+      (nextAppState === 'background' || nextAppState === 'inactive')
+    ) {
+      this.trackEvent(AnalyticsEventType.APP_CLOSE, {
+        sessionDuration: Date.now() - this._sessionStartTime,
+      });
+      
+      // Force send events when going to background
+      this.sendBatch(true);
+    }
+    
+    // Track app open/resume event
+    if (
+      (this._appState === 'background' || this._appState === 'inactive') && 
+      nextAppState === 'active'
+    ) {
+      // If session has timed out, create a new session
+      if (Date.now() - this._sessionStartTime > APP_CONFIG.SESSION_TIMEOUT) {
+        this._sessionId = this.generateSessionId();
+        this._sessionStartTime = Date.now();
+      }
+      
+      this.trackEvent(AnalyticsEventType.APP_OPEN, {
+        isResume: true,
+      });
+    }
+    
+    // Update current state
+    this._appState = nextAppState as 'active' | 'background' | 'inactive';
+  }
+
+  /**
+   * Start batching of analytics events
+   */
+  private startBatching(): void {
+    if (this._batchTimeoutId) {
+      clearTimeout(this._batchTimeoutId);
+    }
+    
+    this._batchTimeoutId = setTimeout(() => {
+      this.sendBatch();
+      this.startBatching();
+    }, APP_CONFIG.ANALYTICS_BATCH_INTERVAL);
+  }
+
+  /**
+   * Load cached events from storage
+   */
+  private async loadCachedEvents(): Promise<void> {
+    try {
+      const cachedEvents = await storageService.getPreference<AnalyticsEvent[]>(
+        STORAGE_KEYS.ANALYTICS_CACHE, 
+        []
+      );
+      
+      if (cachedEvents && cachedEvents.length > 0) {
+        this._eventQueue = [...cachedEvents, ...this._eventQueue];
+        console.log(`Loaded ${cachedEvents.length} cached analytics events`);
+      }
+    } catch (error) {
+      console.error('Error loading cached analytics events:', error);
+    }
+  }
+
+  /**
+   * Save events to cache
+   */
+  private async saveEventCache(): Promise<void> {
+    try {
+      await storageService.setPreference(
+        STORAGE_KEYS.ANALYTICS_CACHE, 
+        this._eventQueue
+      );
+    } catch (error) {
+      console.error('Error saving analytics events cache:', error);
+    }
+  }
+
+  /**
+   * Set the user ID for analytics
+   */
+  setUserId(userId: string | null): void {
+    this._userId = userId;
+  }
+
+  /**
+   * Track an analytics event
+   * 
+   * @param eventType The type of event to track
+   * @param properties Additional properties for the event
+   */
+  trackEvent(eventType: AnalyticsEventType, properties: Record<string, any>): void {
+    if (!this._deviceId || !this._sessionId) {
+      // Queue the event for when we're initialized
+      setTimeout(() => this.trackEvent(eventType, properties), 1000);
       return;
     }
     
-    // Create event
     const event: AnalyticsEvent = {
       eventType,
       timestamp: Date.now(),
-      userId: this.userId || undefined,
-      sessionId: this.sessionId,
-      data,
-      deviceInfo: this.deviceInfo,
+      userId: this._userId,
+      deviceId: this._deviceId!,
+      sessionId: this._sessionId!,
+      properties,
+      platform: Platform.OS,
+      appVersion: this._appVersion,
+      osVersion: this._osVersion,
     };
     
-    // Add to queue
-    this.eventQueue.push(event);
+    this._eventQueue.push(event);
     
-    // Save queue to storage
-    this.saveEventQueue();
-    
-    // Send if batch size reached
-    if (this.eventQueue.length >= EVENT_BATCH_SIZE && !this.isOffline) {
-      this.flushEvents();
+    // If we've reached the batch size, send immediately
+    if (this._eventQueue.length >= APP_CONFIG.ANALYTICS_BATCH_SIZE) {
+      this.sendBatch();
+    } else {
+      // Otherwise, save to cache
+      this.saveEventCache();
     }
   }
-  
+
+  /**
+   * Send batched events to the server
+   * 
+   * @param force Force sending even if already sending
+   */
+  private async sendBatch(force: boolean = false): Promise<void> {
+    // If already sending or no events, skip
+    if ((this._isSending && !force) || this._eventQueue.length === 0) {
+      return;
+    }
+    
+    this._isSending = true;
+    
+    try {
+      // Get current batch and clear from queue
+      const batch = [...this._eventQueue];
+      this._eventQueue = [];
+      
+      // Clear the cache
+      await storageService.setPreference(STORAGE_KEYS.ANALYTICS_CACHE, []);
+      
+      // Send to server
+      await apiService.post(API_CONFIG.ENDPOINTS.ANALYTICS.TRACK_ENGAGEMENT, {
+        events: batch,
+      });
+      
+      console.log(`Successfully sent ${batch.length} analytics events`);
+    } catch (error) {
+      console.error('Error sending analytics batch:', error);
+      
+      // Put events back in queue
+      this._eventQueue = [...this._eventQueue, ...this._eventQueue];
+      
+      // Save failed events to cache
+      await this.saveEventCache();
+    } finally {
+      this._isSending = false;
+    }
+  }
+
   /**
    * Track screen view
    * 
-   * @param screenName - Name of screen being viewed
-   * @param screenClass - Class of screen component
+   * @param screenName Name of the screen
+   * @param params Optional parameters for the screen
    */
-  public trackScreenView(screenName: string, screenClass?: string): void {
+  trackScreenView(screenName: string, params?: Record<string, any>): void {
     this.trackEvent(AnalyticsEventType.SCREEN_VIEW, {
       screenName,
-      screenClass,
+      params,
     });
   }
-  
+
   /**
-   * Track video event
+   * Track login attempt
    * 
-   * @param eventType - Type of video event
-   * @param data - Video event data
+   * @param success Whether the login was successful
+   * @param method The login method used
+   * @param error Error message if login failed
    */
-  public trackVideoEvent(
-    eventType: AnalyticsEventType,
-    data: {
-      episodeId: number;
-      seriesId: number;
-      position?: number;
-      duration?: number;
-    }
-  ): void {
-    this.trackEvent(eventType, data);
+  trackLoginAttempt(success: boolean, method: string = 'email', error?: string): void {
+    this.trackEvent(AnalyticsEventType.LOGIN, {
+      success,
+      method,
+      error,
+    });
   }
-  
+
   /**
-   * Track search event
+   * Track registration attempt
    * 
-   * @param query - Search query
-   * @param resultsCount - Number of results
-   * @param filters - Search filters applied
+   * @param success Whether the registration was successful
+   * @param method The registration method used
+   * @param error Error message if registration failed
    */
-  public trackSearch(
-    query: string,
-    resultsCount: number,
-    filters?: Record<string, any>
+  trackRegistrationAttempt(success: boolean, method: string = 'email', error?: string): void {
+    this.trackEvent(AnalyticsEventType.REGISTRATION, {
+      success,
+      method,
+      error,
+    });
+  }
+
+  /**
+   * Track series view
+   * 
+   * @param seriesId ID of the series
+   * @param seriesName Name of the series
+   * @param source Where the series was accessed from
+   */
+  trackSeriesView(seriesId: number | string, seriesName: string, source?: string): void {
+    this.trackEvent(AnalyticsEventType.SERIES_VIEW, {
+      seriesId,
+      seriesName,
+      source,
+    });
+  }
+
+  /**
+   * Track episode start
+   * 
+   * @param episodeId ID of the episode
+   * @param episodeName Name of the episode
+   * @param seriesId ID of the series
+   * @param seriesName Name of the series
+   * @param episodeNumber Episode number
+   * @param seasonNumber Season number
+   * @param source Where the episode was accessed from
+   */
+  trackEpisodeStart(
+    episodeId: number | string,
+    episodeName: string,
+    seriesId: number | string,
+    seriesName: string,
+    episodeNumber: number,
+    seasonNumber: number = 1,
+    source?: string
   ): void {
+    this.trackEvent(AnalyticsEventType.EPISODE_START, {
+      episodeId,
+      episodeName,
+      seriesId,
+      seriesName,
+      episodeNumber,
+      seasonNumber,
+      source,
+    });
+  }
+
+  /**
+   * Track episode progress
+   * 
+   * @param episodeId ID of the episode
+   * @param progress Progress percentage (0-100)
+   * @param currentTime Current playback time in seconds
+   * @param totalTime Total duration in seconds
+   */
+  trackEpisodeProgress(
+    episodeId: number | string,
+    progress: number,
+    currentTime: number,
+    totalTime: number
+  ): void {
+    // Only track progress at certain intervals to avoid too many events
+    if (progress % 10 !== 0 && progress !== APP_CONFIG.COMPLETION_THRESHOLD) {
+      return;
+    }
+    
+    this.trackEvent(AnalyticsEventType.EPISODE_PROGRESS, {
+      episodeId,
+      progress,
+      currentTime,
+      totalTime,
+    });
+    
+    // If progress is past the completion threshold, also track as completed
+    if (progress >= APP_CONFIG.COMPLETION_THRESHOLD) {
+      this.trackEpisodeComplete(episodeId, currentTime, totalTime);
+    }
+  }
+
+  /**
+   * Track episode completion
+   * 
+   * @param episodeId ID of the episode
+   * @param duration Duration watched in seconds
+   * @param totalDuration Total duration in seconds
+   */
+  trackEpisodeComplete(
+    episodeId: number | string,
+    duration: number,
+    totalDuration: number
+  ): void {
+    this.trackEvent(AnalyticsEventType.EPISODE_COMPLETE, {
+      episodeId,
+      duration,
+      totalDuration,
+      completionRatio: duration / totalDuration,
+    });
+  }
+
+  /**
+   * Track search
+   * 
+   * @param query Search query
+   * @param resultsCount Number of results
+   * @param filters Any filters applied
+   */
+  trackSearch(query: string, resultsCount: number, filters?: Record<string, any>): void {
     this.trackEvent(AnalyticsEventType.SEARCH, {
       query,
       resultsCount,
       filters,
     });
   }
-  
-  /**
-   * Track content rating
-   * 
-   * @param seriesId - ID of series being rated
-   * @param score - Rating score (1-5)
-   * @param hasComment - Whether rating includes comment
-   */
-  public trackContentRating(
-    seriesId: number,
-    score: number,
-    hasComment: boolean
-  ): void {
-    this.trackEvent(AnalyticsEventType.RATE_CONTENT, {
-      seriesId,
-      score,
-      hasComment,
-    });
-  }
-  
+
   /**
    * Track error
    * 
-   * @param errorName - Error name
-   * @param errorMessage - Error message
-   * @param stack - Error stack trace
+   * @param errorType Type of error
+   * @param errorMessage Error message
+   * @param errorCode Error code if available
+   * @param context Additional context about where the error occurred
    */
-  public trackError(
-    errorName: string,
+  trackError(
+    errorType: string,
     errorMessage: string,
-    stack?: string
+    errorCode?: string | number,
+    context?: Record<string, any>
   ): void {
     this.trackEvent(AnalyticsEventType.ERROR, {
-      errorName,
+      errorType,
       errorMessage,
-      stack,
+      errorCode,
+      context,
     });
-  }
-  
-  /**
-   * Send all queued events to server
-   */
-  public async flushEvents(): Promise<void> {
-    if (this.eventQueue.length === 0 || this.isOffline || this.isSending) {
-      return;
-    }
-    
-    try {
-      this.isSending = true;
-      
-      // Send events to server
-      await api.post('/analytics/events', {
-        events: this.eventQueue,
-      });
-      
-      // Clear queue
-      this.eventQueue = [];
-      
-      // Save empty queue
-      this.saveEventQueue();
-      
-    } catch (error) {
-      console.error('Error sending analytics events:', error);
-    } finally {
-      this.isSending = false;
-    }
-  }
-  
-  /**
-   * Save event queue to storage
-   */
-  private async saveEventQueue(): Promise<void> {
-    try {
-      await AsyncStorage.setItem(
-        StorageKey.ANALYTICS_EVENTS,
-        JSON.stringify(this.eventQueue)
-      );
-    } catch (error) {
-      console.error('Error saving analytics events:', error);
-    }
-  }
-  
-  /**
-   * Generate unique device ID
-   */
-  private generateDeviceId(): string {
-    return 'dv_' + Math.random().toString(36).substring(2, 15) + 
-           Math.random().toString(36).substring(2, 15);
-  }
-  
-  /**
-   * Generate unique session ID
-   */
-  private generateSessionId(): string {
-    return 'session_' + Date.now() + '_' + 
-           Math.random().toString(36).substring(2, 9);
-  }
-  
-  /**
-   * Clean up resources
-   */
-  public cleanup(): void {
-    // Send any queued events before cleanup
-    this.flushEvents();
   }
 }
 
-// Export as singleton
-export default new AnalyticsService();
+export const analyticsService = new AnalyticsService();

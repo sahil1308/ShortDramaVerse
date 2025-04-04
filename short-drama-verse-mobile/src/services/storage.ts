@@ -1,848 +1,348 @@
 /**
- * Storage Service for ShortDramaVerse Mobile
+ * Storage Service
  * 
- * This service provides a unified interface for storing and
- * retrieving data from AsyncStorage, with caching for
- * improved performance.
+ * Handles all local storage operations for the application
+ * including persistence of user preferences, auth tokens, and cache.
  */
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  User, 
-  DramaSeries, 
-  Episode, 
-  WatchHistory, 
-  Download,
-  UserSettings,
-  WatchlistItem,
-  UserPreferences,
-  AppState
-} from '@/types/drama';
-
-// Storage keys enum
-export enum StorageKey {
-  // Auth
-  AUTH_TOKEN = '@ShortDramaVerse:authToken',
-  REFRESH_TOKEN = '@ShortDramaVerse:refreshToken',
-  USER = '@ShortDramaVerse:user',
-  
-  // App state
-  APP_STATE = '@ShortDramaVerse:appState',
-  DEVICE_ID = '@ShortDramaVerse:deviceId',
-  FIRST_LAUNCH = '@ShortDramaVerse:firstLaunch',
-  ONBOARDING_COMPLETED = '@ShortDramaVerse:onboardingCompleted',
-  
-  // User data
-  USER_SETTINGS = '@ShortDramaVerse:userSettings',
-  USER_PREFERENCES = '@ShortDramaVerse:userPreferences',
-  WATCH_HISTORY = '@ShortDramaVerse:watchHistory',
-  WATCHLIST = '@ShortDramaVerse:watchlist',
-  DOWNLOADS = '@ShortDramaVerse:downloads',
-  
-  // Content data
-  SERIES_PREFIX = '@ShortDramaVerse:series:',
-  EPISODE_PREFIX = '@ShortDramaVerse:episode:',
-  RECENT_SERIES = '@ShortDramaVerse:recentSeries',
-  TRENDING_SERIES = '@ShortDramaVerse:trendingSeries',
-  RECOMMENDED_SERIES = '@ShortDramaVerse:recommendedSeries',
-  
-  // Cache
-  CACHE_PREFIX = '@ShortDramaVerse:cache:',
-  CACHE_EXPIRY_PREFIX = '@ShortDramaVerse:cacheExpiry:',
-  
-  // Analytics
-  ANALYTICS_EVENTS = '@ShortDramaVerse:analyticsEvents',
-  
-  // Offline data
-  OFFLINE_DATA_PREFIX = '@ShortDramaVerse:offline:',
-}
-
-// Default cache expiration (24 hours in milliseconds)
-const DEFAULT_CACHE_EXPIRY = 24 * 60 * 60 * 1000;
+import { STORAGE_KEYS } from '@/constants/config';
 
 /**
- * Storage Service class for managing local data storage
+ * StorageService Class
+ * 
+ * Provides methods for interacting with device storage
  */
 class StorageService {
-  // In-memory cache
-  private memoryCache: Map<string, any> = new Map();
-  
-  constructor() {
-    // Initialize
-    this.init();
-  }
-  
   /**
-   * Initialize storage service
-   */
-  private async init(): Promise<void> {
-    try {
-      // Check if app state exists
-      const appStateJson = await AsyncStorage.getItem(StorageKey.APP_STATE);
-      
-      if (!appStateJson) {
-        // Create initial app state
-        const initialAppState: AppState = {
-          isNetworkAvailable: true,
-          lastSyncTime: null,
-          appVersion: process.env.APP_VERSION || '1.0.0',
-          isFirstLaunch: true,
-          hasCompletedOnboarding: false,
-          currentlyPlayingEpisode: null,
-          appOpenCount: 0,
-          deviceId: '',
-          installedDate: new Date().toISOString(),
-          lastUpdateDate: null,
-        };
-        
-        // Save initial app state
-        await this.setItem(StorageKey.APP_STATE, initialAppState);
-      } else {
-        // Load app state and update app open count
-        const appState: AppState = JSON.parse(appStateJson);
-        appState.appOpenCount += 1;
-        await this.setItem(StorageKey.APP_STATE, appState);
-      }
-    } catch (error) {
-      console.error('Error initializing storage service:', error);
-    }
-  }
-  
-  /**
-   * Set item in storage
+   * Saves auth token to storage
    * 
-   * @param key - Storage key
-   * @param value - Value to store
+   * @param token JWT auth token
    */
-  public async setItem(key: string, value: any): Promise<void> {
+  async setAuthToken(token: string): Promise<void> {
     try {
-      const jsonValue = JSON.stringify(value);
-      await AsyncStorage.setItem(key, jsonValue);
-      
-      // Update memory cache
-      this.memoryCache.set(key, value);
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
     } catch (error) {
-      console.error(`Error setting item [${key}]:`, error);
+      console.error('Error saving auth token:', error);
       throw error;
     }
   }
-  
+
   /**
-   * Get item from storage
+   * Retrieves auth token from storage
    * 
-   * @param key - Storage key
-   * @returns Stored value or null if not found
+   * @returns The stored auth token or null if not found
    */
-  public async getItem<T>(key: string): Promise<T | null> {
+  async getAuthToken(): Promise<string | null> {
     try {
-      // Check memory cache first
-      if (this.memoryCache.has(key)) {
-        return this.memoryCache.get(key) as T;
-      }
-      
-      // Get from AsyncStorage
-      const jsonValue = await AsyncStorage.getItem(key);
-      
-      if (jsonValue !== null) {
-        const value = JSON.parse(jsonValue) as T;
-        
-        // Update memory cache
-        this.memoryCache.set(key, value);
-        
-        return value;
-      }
-      
-      return null;
+      return await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     } catch (error) {
-      console.error(`Error getting item [${key}]:`, error);
+      console.error('Error getting auth token:', error);
       return null;
     }
   }
-  
+
   /**
-   * Remove item from storage
+   * Saves refresh token to storage
    * 
-   * @param key - Storage key
+   * @param token JWT refresh token
    */
-  public async removeItem(key: string): Promise<void> {
+  async setRefreshToken(token: string): Promise<void> {
     try {
-      await AsyncStorage.removeItem(key);
-      
-      // Remove from memory cache
-      this.memoryCache.delete(key);
+      await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
     } catch (error) {
-      console.error(`Error removing item [${key}]:`, error);
+      console.error('Error saving refresh token:', error);
       throw error;
     }
   }
-  
+
   /**
-   * Check if item exists in storage
+   * Retrieves refresh token from storage
    * 
-   * @param key - Storage key
-   * @returns True if item exists
+   * @returns The stored refresh token or null if not found
    */
-  public async hasItem(key: string): Promise<boolean> {
+  async getRefreshToken(): Promise<string | null> {
     try {
-      // Check memory cache first
-      if (this.memoryCache.has(key)) {
-        return true;
-      }
+      return await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    } catch (error) {
+      console.error('Error getting refresh token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clears all authentication data from storage
+   */
+  async clearAuthData(): Promise<void> {
+    try {
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.AUTH_TOKEN,
+        STORAGE_KEYS.REFRESH_TOKEN,
+        STORAGE_KEYS.USER
+      ]);
+    } catch (error) {
+      console.error('Error clearing auth data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Saves user data to storage
+   * 
+   * @param userData User object to store
+   */
+  async setUser(userData: any): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
+    } catch (error) {
+      console.error('Error saving user data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves user data from storage
+   * 
+   * @returns The stored user data or null if not found
+   */
+  async getUser<T>(): Promise<T | null> {
+    try {
+      const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+      return userData ? JSON.parse(userData) : null;
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Saves watch history to storage
+   * 
+   * @param watchHistory Array of watch history items
+   */
+  async setWatchHistory(watchHistory: any[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.WATCH_HISTORY, JSON.stringify(watchHistory));
+    } catch (error) {
+      console.error('Error saving watch history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves watch history from storage
+   * 
+   * @returns The stored watch history or empty array if not found
+   */
+  async getWatchHistory<T>(): Promise<T[]> {
+    try {
+      const watchHistory = await AsyncStorage.getItem(STORAGE_KEYS.WATCH_HISTORY);
+      return watchHistory ? JSON.parse(watchHistory) : [];
+    } catch (error) {
+      console.error('Error getting watch history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Adds an item to watch history
+   * 
+   * @param item New watch history item
+   * @param maxItems Maximum number of items to keep in history
+   */
+  async addToWatchHistory(item: any, maxItems: number = 20): Promise<void> {
+    try {
+      const history = await this.getWatchHistory<any>();
       
-      // Check AsyncStorage
+      // Remove if already exists (to move to top of list)
+      const filteredHistory = history.filter(historyItem => historyItem.id !== item.id);
+      
+      // Add new item at the beginning
+      const newHistory = [item, ...filteredHistory].slice(0, maxItems);
+      
+      await this.setWatchHistory(newHistory);
+    } catch (error) {
+      console.error('Error adding to watch history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Updates progress for an item in watch history
+   * 
+   * @param id ID of the item to update
+   * @param progressData New progress data
+   */
+  async updateWatchProgress(id: number, progressData: any): Promise<void> {
+    try {
+      const history = await this.getWatchHistory<any>();
+      const itemIndex = history.findIndex(item => item.id === id);
+      
+      if (itemIndex >= 0) {
+        history[itemIndex] = { ...history[itemIndex], ...progressData };
+        await this.setWatchHistory(history);
+      }
+    } catch (error) {
+      console.error('Error updating watch progress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Saves user app preferences 
+   * 
+   * @param key Preference key
+   * @param value Preference value
+   */
+  async setPreference<T>(key: string, value: T): Promise<void> {
+    try {
+      await AsyncStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error(`Error saving preference ${key}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves user app preference
+   * 
+   * @param key Preference key
+   * @param defaultValue Default value if preference not found
+   * @returns The stored preference value or defaultValue if not found
+   */
+  async getPreference<T>(key: string, defaultValue: T): Promise<T> {
+    try {
       const value = await AsyncStorage.getItem(key);
-      return value !== null;
+      return value ? JSON.parse(value) : defaultValue;
     } catch (error) {
-      console.error(`Error checking item [${key}]:`, error);
-      return false;
+      console.error(`Error getting preference ${key}:`, error);
+      return defaultValue;
     }
   }
-  
+
   /**
-   * Set cached item with expiration
+   * Saves search history to storage
    * 
-   * @param key - Cache key
-   * @param value - Value to cache
-   * @param expiry - Cache expiration in milliseconds (default: 24 hours)
+   * @param searchHistory Array of search terms
    */
-  public async setCachedItem(
-    key: string,
-    value: any,
-    expiry: number = DEFAULT_CACHE_EXPIRY
-  ): Promise<void> {
+  async setSearchHistory(searchHistory: string[]): Promise<void> {
     try {
-      // Set cache item
-      const cacheKey = `${StorageKey.CACHE_PREFIX}${key}`;
-      await this.setItem(cacheKey, value);
-      
-      // Set expiration timestamp
-      const expiryKey = `${StorageKey.CACHE_EXPIRY_PREFIX}${key}`;
-      const expiryTime = Date.now() + expiry;
-      await this.setItem(expiryKey, expiryTime);
+      await AsyncStorage.setItem(STORAGE_KEYS.SEARCH_HISTORY, JSON.stringify(searchHistory));
     } catch (error) {
-      console.error(`Error setting cached item [${key}]:`, error);
+      console.error('Error saving search history:', error);
       throw error;
     }
   }
-  
+
   /**
-   * Get cached item
+   * Retrieves search history from storage
    * 
-   * @param key - Cache key
-   * @returns Cached value or null if expired or not found
+   * @returns The stored search history or empty array if not found
    */
-  public async getCachedItem<T>(key: string): Promise<T | null> {
+  async getSearchHistory(): Promise<string[]> {
     try {
-      // Get expiration time
-      const expiryKey = `${StorageKey.CACHE_EXPIRY_PREFIX}${key}`;
-      const expiryTime = await this.getItem<number>(expiryKey);
-      
-      // Check if expired
-      if (expiryTime === null || Date.now() > expiryTime) {
-        // Remove expired cache
-        const cacheKey = `${StorageKey.CACHE_PREFIX}${key}`;
-        await this.removeItem(cacheKey);
-        await this.removeItem(expiryKey);
-        return null;
-      }
-      
-      // Get cached value
-      const cacheKey = `${StorageKey.CACHE_PREFIX}${key}`;
-      return await this.getItem<T>(cacheKey);
+      const searchHistory = await AsyncStorage.getItem(STORAGE_KEYS.SEARCH_HISTORY);
+      return searchHistory ? JSON.parse(searchHistory) : [];
     } catch (error) {
-      console.error(`Error getting cached item [${key}]:`, error);
+      console.error('Error getting search history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Adds a term to search history
+   * 
+   * @param term Search term to add
+   * @param maxItems Maximum number of items to keep in history
+   */
+  async addToSearchHistory(term: string, maxItems: number = 10): Promise<void> {
+    try {
+      if (!term || term.trim() === '') return;
+      
+      const history = await this.getSearchHistory();
+      
+      // Remove if already exists (to move to top of list)
+      const filteredHistory = history.filter(item => item.toLowerCase() !== term.toLowerCase());
+      
+      // Add new item at the beginning
+      const newHistory = [term, ...filteredHistory].slice(0, maxItems);
+      
+      await this.setSearchHistory(newHistory);
+    } catch (error) {
+      console.error('Error adding to search history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clears search history
+   */
+  async clearSearchHistory(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.SEARCH_HISTORY);
+    } catch (error) {
+      console.error('Error clearing search history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sets device ID for analytics and tracking
+   * 
+   * @param deviceId Unique device identifier
+   */
+  async setDeviceId(deviceId: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
+    } catch (error) {
+      console.error('Error saving device ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gets device ID for analytics and tracking
+   * 
+   * @returns The stored device ID or null if not found
+   */
+  async getDeviceId(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+    } catch (error) {
+      console.error('Error getting device ID:', error);
       return null;
     }
   }
-  
+
   /**
-   * Remove cached item
+   * Gets multi-key data from storage
    * 
-   * @param key - Cache key
+   * @param keys List of keys to fetch
+   * @returns Object with key-value pairs or null values for missing keys
    */
-  public async removeCachedItem(key: string): Promise<void> {
+  async multiGet<T>(keys: string[]): Promise<Record<string, T | null>> {
     try {
-      const cacheKey = `${StorageKey.CACHE_PREFIX}${key}`;
-      const expiryKey = `${StorageKey.CACHE_EXPIRY_PREFIX}${key}`;
-      
-      await this.removeItem(cacheKey);
-      await this.removeItem(expiryKey);
-    } catch (error) {
-      console.error(`Error removing cached item [${key}]:`, error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Clear all expired cache items
-   */
-  public async clearExpiredCache(): Promise<void> {
-    try {
-      // Get all keys
-      const keys = await AsyncStorage.getAllKeys();
-      
-      // Filter expiry keys
-      const expiryKeys = keys.filter(key => 
-        key.startsWith(StorageKey.CACHE_EXPIRY_PREFIX)
+      const keyValuePairs = await AsyncStorage.multiGet(keys);
+      return Object.fromEntries(
+        keyValuePairs.map(([key, value]) => [key, value ? JSON.parse(value) : null])
       );
-      
-      // Check each expiry
-      for (const expiryKey of expiryKeys) {
-        const expiryJson = await AsyncStorage.getItem(expiryKey);
-        
-        if (expiryJson !== null) {
-          const expiryTime = JSON.parse(expiryJson);
-          
-          if (Date.now() > expiryTime) {
-            // Extract cache key from expiry key
-            const cacheKey = expiryKey.replace(
-              StorageKey.CACHE_EXPIRY_PREFIX,
-              StorageKey.CACHE_PREFIX
-            );
-            
-            // Remove expired cache
-            await this.removeItem(cacheKey);
-            await this.removeItem(expiryKey);
-          }
-        }
-      }
     } catch (error) {
-      console.error('Error clearing expired cache:', error);
-      throw error;
+      console.error('Error in multiGet:', error);
+      return keys.reduce((acc, key) => ({ ...acc, [key]: null }), {});
     }
   }
-  
+
   /**
-   * Save user data
-   * 
-   * @param user - User data to save
+   * Clears all app data from storage
+   * Warning: This will clear all stored app data
    */
-  public async saveUser(user: User): Promise<void> {
-    await this.setItem(StorageKey.USER, user);
-  }
-  
-  /**
-   * Get user data
-   * 
-   * @returns User data or null if not found
-   */
-  public async getUser(): Promise<User | null> {
-    return await this.getItem<User>(StorageKey.USER);
-  }
-  
-  /**
-   * Save user settings
-   * 
-   * @param settings - User settings to save
-   */
-  public async saveUserSettings(settings: UserSettings): Promise<void> {
-    await this.setItem(StorageKey.USER_SETTINGS, settings);
-  }
-  
-  /**
-   * Get user settings
-   * 
-   * @returns User settings or default settings if not found
-   */
-  public async getUserSettings(): Promise<UserSettings> {
-    const settings = await this.getItem<UserSettings>(StorageKey.USER_SETTINGS);
-    
-    if (settings) {
-      return settings;
-    }
-    
-    // Default settings
-    return {
-      theme: 'system',
-      language: 'en',
-      downloadQuality: 'auto',
-      streamingQuality: 'auto',
-      autoplay: true,
-      notifications: {
-        newEpisodes: true,
-        offers: true,
-        reminders: true,
-        updates: true,
-      },
-      downloadOverMobile: false,
-      subtitlesEnabled: true,
-      subtitlesLanguage: 'en',
-      audioLanguage: 'en',
-      playbackSpeed: 1.0,
-    };
-  }
-  
-  /**
-   * Save user preferences
-   * 
-   * @param preferences - User preferences to save
-   */
-  public async saveUserPreferences(preferences: UserPreferences): Promise<void> {
-    await this.setItem(StorageKey.USER_PREFERENCES, preferences);
-  }
-  
-  /**
-   * Get user preferences
-   * 
-   * @returns User preferences or default preferences if not found
-   */
-  public async getUserPreferences(): Promise<UserPreferences> {
-    const preferences = await this.getItem<UserPreferences>(StorageKey.USER_PREFERENCES);
-    
-    if (preferences) {
-      return preferences;
-    }
-    
-    // Default preferences
-    return {
-      favoriteGenres: [],
-      favoriteTags: [],
-      watchedSeries: [],
-      likedSeries: [],
-      watchHistory: [],
-    };
-  }
-  
-  /**
-   * Save watch history
-   * 
-   * @param watchHistory - Watch history to save
-   */
-  public async saveWatchHistory(watchHistory: WatchHistory[]): Promise<void> {
-    await this.setItem(StorageKey.WATCH_HISTORY, watchHistory);
-  }
-  
-  /**
-   * Get watch history
-   * 
-   * @returns Watch history or empty array if not found
-   */
-  public async getWatchHistory(): Promise<WatchHistory[]> {
-    const watchHistory = await this.getItem<WatchHistory[]>(StorageKey.WATCH_HISTORY);
-    return watchHistory || [];
-  }
-  
-  /**
-   * Add item to watch history
-   * 
-   * @param item - Watch history item to add
-   * @returns Updated watch history
-   */
-  public async addToWatchHistory(item: WatchHistory): Promise<WatchHistory[]> {
-    const watchHistory = await this.getWatchHistory();
-    
-    // Check if item already exists
-    const existingIndex = watchHistory.findIndex(
-      hist => hist.episodeId === item.episodeId
-    );
-    
-    if (existingIndex !== -1) {
-      // Update existing item
-      watchHistory[existingIndex] = {
-        ...watchHistory[existingIndex],
-        ...item,
-        lastWatched: new Date().toISOString(),
-      };
-    } else {
-      // Add new item
-      watchHistory.unshift({
-        ...item,
-        lastWatched: new Date().toISOString(),
-      });
-    }
-    
-    // Limit history size
-    const limitedHistory = watchHistory.slice(0, 100);
-    
-    // Save updated history
-    await this.saveWatchHistory(limitedHistory);
-    
-    return limitedHistory;
-  }
-  
-  /**
-   * Save watchlist
-   * 
-   * @param watchlist - Watchlist to save
-   */
-  public async saveWatchlist(watchlist: WatchlistItem[]): Promise<void> {
-    await this.setItem(StorageKey.WATCHLIST, watchlist);
-  }
-  
-  /**
-   * Get watchlist
-   * 
-   * @returns Watchlist or empty array if not found
-   */
-  public async getWatchlist(): Promise<WatchlistItem[]> {
-    const watchlist = await this.getItem<WatchlistItem[]>(StorageKey.WATCHLIST);
-    return watchlist || [];
-  }
-  
-  /**
-   * Add item to watchlist
-   * 
-   * @param seriesId - Series ID to add
-   * @param series - Series details
-   * @returns Updated watchlist
-   */
-  public async addToWatchlist(
-    seriesId: number,
-    series: DramaSeries
-  ): Promise<WatchlistItem[]> {
-    const watchlist = await this.getWatchlist();
-    const userId = (await this.getUser())?.id || 0;
-    
-    // Check if already in watchlist
-    if (!watchlist.some(item => item.seriesId === seriesId)) {
-      // Add to watchlist
-      const newItem: WatchlistItem = {
-        id: Date.now(),
-        userId,
-        seriesId,
-        addedAt: new Date().toISOString(),
-        series: {
-          id: series.id,
-          title: series.title,
-          coverImage: series.coverImage,
-          genre: series.genre,
-          releaseDate: series.releaseDate,
-          totalEpisodes: series.totalEpisodes,
-          averageRating: series.averageRating,
-        },
-      };
-      
-      watchlist.unshift(newItem);
-      
-      // Save updated watchlist
-      await this.saveWatchlist(watchlist);
-    }
-    
-    return watchlist;
-  }
-  
-  /**
-   * Remove item from watchlist
-   * 
-   * @param seriesId - Series ID to remove
-   * @returns Updated watchlist
-   */
-  public async removeFromWatchlist(seriesId: number): Promise<WatchlistItem[]> {
-    const watchlist = await this.getWatchlist();
-    
-    // Filter out series
-    const updatedWatchlist = watchlist.filter(
-      item => item.seriesId !== seriesId
-    );
-    
-    // Save updated watchlist
-    await this.saveWatchlist(updatedWatchlist);
-    
-    return updatedWatchlist;
-  }
-  
-  /**
-   * Save downloads
-   * 
-   * @param downloads - Downloads to save
-   */
-  public async saveDownloads(downloads: Download[]): Promise<void> {
-    await this.setItem(StorageKey.DOWNLOADS, downloads);
-  }
-  
-  /**
-   * Get downloads
-   * 
-   * @returns Downloads or empty array if not found
-   */
-  public async getDownloads(): Promise<Download[]> {
-    const downloads = await this.getItem<Download[]>(StorageKey.DOWNLOADS);
-    return downloads || [];
-  }
-  
-  /**
-   * Add download
-   * 
-   * @param download - Download to add
-   * @returns Updated downloads
-   */
-  public async addDownload(download: Download): Promise<Download[]> {
-    const downloads = await this.getDownloads();
-    
-    // Check if already downloaded
-    const existingIndex = downloads.findIndex(
-      item => item.episodeId === download.episodeId
-    );
-    
-    if (existingIndex !== -1) {
-      // Update existing download
-      downloads[existingIndex] = {
-        ...downloads[existingIndex],
-        ...download,
-        downloadDate: new Date().toISOString(),
-      };
-    } else {
-      // Add new download
-      downloads.unshift({
-        ...download,
-        downloadDate: new Date().toISOString(),
-      });
-    }
-    
-    // Save updated downloads
-    await this.saveDownloads(downloads);
-    
-    return downloads;
-  }
-  
-  /**
-   * Remove download
-   * 
-   * @param episodeId - Episode ID to remove
-   * @returns Updated downloads
-   */
-  public async removeDownload(episodeId: number): Promise<Download[]> {
-    const downloads = await this.getDownloads();
-    
-    // Filter out episode
-    const updatedDownloads = downloads.filter(
-      item => item.episodeId !== episodeId
-    );
-    
-    // Save updated downloads
-    await this.saveDownloads(updatedDownloads);
-    
-    return updatedDownloads;
-  }
-  
-  /**
-   * Save series data
-   * 
-   * @param series - Series data to save
-   */
-  public async saveSeries(series: DramaSeries): Promise<void> {
-    const key = `${StorageKey.SERIES_PREFIX}${series.id}`;
-    await this.setItem(key, series);
-  }
-  
-  /**
-   * Get series data
-   * 
-   * @param seriesId - Series ID to get
-   * @returns Series data or null if not found
-   */
-  public async getSeries(seriesId: number): Promise<DramaSeries | null> {
-    const key = `${StorageKey.SERIES_PREFIX}${seriesId}`;
-    return await this.getItem<DramaSeries>(key);
-  }
-  
-  /**
-   * Save episode data
-   * 
-   * @param episode - Episode data to save
-   */
-  public async saveEpisode(episode: Episode): Promise<void> {
-    const key = `${StorageKey.EPISODE_PREFIX}${episode.id}`;
-    await this.setItem(key, episode);
-  }
-  
-  /**
-   * Get episode data
-   * 
-   * @param episodeId - Episode ID to get
-   * @returns Episode data or null if not found
-   */
-  public async getEpisode(episodeId: number): Promise<Episode | null> {
-    const key = `${StorageKey.EPISODE_PREFIX}${episodeId}`;
-    return await this.getItem<Episode>(key);
-  }
-  
-  /**
-   * Save recent series
-   * 
-   * @param seriesIds - Recent series IDs to save
-   */
-  public async saveRecentSeries(seriesIds: number[]): Promise<void> {
-    await this.setItem(StorageKey.RECENT_SERIES, seriesIds);
-  }
-  
-  /**
-   * Get recent series
-   * 
-   * @returns Recent series IDs or empty array if not found
-   */
-  public async getRecentSeries(): Promise<number[]> {
-    const seriesIds = await this.getItem<number[]>(StorageKey.RECENT_SERIES);
-    return seriesIds || [];
-  }
-  
-  /**
-   * Add to recent series
-   * 
-   * @param seriesId - Series ID to add to recents
-   * @returns Updated recent series IDs
-   */
-  public async addToRecentSeries(seriesId: number): Promise<number[]> {
-    let recentSeries = await this.getRecentSeries();
-    
-    // Remove if already exists
-    recentSeries = recentSeries.filter(id => id !== seriesId);
-    
-    // Add to beginning
-    recentSeries.unshift(seriesId);
-    
-    // Limit to 20 items
-    recentSeries = recentSeries.slice(0, 20);
-    
-    // Save updated recents
-    await this.saveRecentSeries(recentSeries);
-    
-    return recentSeries;
-  }
-  
-  /**
-   * Clear all stored data
-   */
-  public async clearAll(): Promise<void> {
+  async clearAllData(): Promise<void> {
     try {
-      // Get all keys
-      const keys = await AsyncStorage.getAllKeys();
-      
-      // Clear all keys
-      await AsyncStorage.multiRemove(keys);
-      
-      // Clear memory cache
-      this.memoryCache.clear();
-      
-      // Re-initialize
-      await this.init();
+      await AsyncStorage.clear();
     } catch (error) {
       console.error('Error clearing all data:', error);
       throw error;
     }
   }
-  
-  /**
-   * Clear user data (for logout)
-   */
-  public async clearUserData(): Promise<void> {
-    try {
-      // Keys to remove
-      const keysToRemove = [
-        StorageKey.AUTH_TOKEN,
-        StorageKey.REFRESH_TOKEN,
-        StorageKey.USER,
-        StorageKey.USER_PREFERENCES,
-        StorageKey.WATCH_HISTORY,
-        StorageKey.WATCHLIST,
-      ];
-      
-      // Remove keys
-      await AsyncStorage.multiRemove(keysToRemove);
-      
-      // Remove from memory cache
-      keysToRemove.forEach(key => this.memoryCache.delete(key));
-    } catch (error) {
-      console.error('Error clearing user data:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Get estimated storage usage
-   * 
-   * @returns Storage usage in bytes
-   */
-  public async getStorageUsage(): Promise<number> {
-    try {
-      // Get all keys
-      const keys = await AsyncStorage.getAllKeys();
-      
-      // Get size of each item
-      let totalSize = 0;
-      
-      await Promise.all(
-        keys.map(async (key) => {
-          const value = await AsyncStorage.getItem(key);
-          if (value) {
-            totalSize += value.length;
-          }
-        })
-      );
-      
-      return totalSize;
-    } catch (error) {
-      console.error('Error getting storage usage:', error);
-      return 0;
-    }
-  }
-  
-  /**
-   * Get all keys matching a prefix
-   * 
-   * @param prefix - Key prefix to match
-   * @returns Array of matching keys
-   */
-  public async getKeysByPrefix(prefix: string): Promise<string[]> {
-    try {
-      // Get all keys
-      const allKeys = await AsyncStorage.getAllKeys();
-      
-      // Filter by prefix
-      return allKeys.filter(key => key.startsWith(prefix));
-    } catch (error) {
-      console.error(`Error getting keys by prefix [${prefix}]:`, error);
-      return [];
-    }
-  }
-  
-  /**
-   * Get multiple items
-   * 
-   * @param keys - Keys to get
-   * @returns Object mapping keys to values
-   */
-  public async multiGet(keys: string[]): Promise<Record<string, any>> {
-    try {
-      const results: Record<string, any> = {};
-      
-      // First check memory cache
-      const uncachedKeys = [];
-      
-      for (const key of keys) {
-        if (this.memoryCache.has(key)) {
-          results[key] = this.memoryCache.get(key);
-        } else {
-          uncachedKeys.push(key);
-        }
-      }
-      
-      // Get remaining from AsyncStorage
-      if (uncachedKeys.length > 0) {
-        const pairs = await AsyncStorage.multiGet(uncachedKeys);
-        
-        pairs.forEach(([key, value]) => {
-          if (value !== null) {
-            try {
-              const parsedValue = JSON.parse(value);
-              results[key] = parsedValue;
-              
-              // Update memory cache
-              this.memoryCache.set(key, parsedValue);
-            } catch (error) {
-              console.error(`Error parsing value for key [${key}]:`, error);
-            }
-          }
-        });
-      }
-      
-      return results;
-    } catch (error) {
-      console.error('Error in multiGet:', error);
-      return {};
-    }
-  }
 }
 
-// Export as singleton
-export default new StorageService();
+export const storageService = new StorageService();
