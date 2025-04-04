@@ -7,14 +7,12 @@
       "@/*": ["src/*"],
       "@assets/*": ["assets/*"],
       "@components/*": ["src/components/*"],
-      "@screens/*": ["src/screens/*"],
-      "@navigation/*": ["src/navigation/*"],
       "@hooks/*": ["src/hooks/*"],
+      "@navigation/*": ["src/navigation/*"],
+      "@screens/*": ["src/screens/*"],
       "@services/*": ["src/services/*"],
-      "@lib/*": ["src/lib/*"],
       "@types/*": ["src/types/*"],
-      "@utils/*": ["src/utils/*"],
-      "@constants/*": ["src/constants/*"]
+      "@utils/*": ["src/utils/*"]
     }
   }
 }

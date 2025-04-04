@@ -1,53 +1,59 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+/**
+ * Empty State View Component for ShortDramaVerse Mobile
+ * 
+ * This component displays a user-friendly message and action button
+ * when there is no content to display in a list or section.
+ */
 
+import React from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity 
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+
+/**
+ * Props for the EmptyStateView component
+ */
 interface EmptyStateViewProps {
-  title: string;
-  message: string;
-  icon?: 'search' | 'watchlist' | 'history' | 'download' | 'error' | 'network';
-  actionText?: string;
-  onAction?: () => void;
+  icon: string;                      // Icon name from MaterialIcons
+  message: string;                   // Message to display
+  actionText?: string;               // Text for the action button (optional)
+  onAction?: () => void;             // Action button callback (optional)
+  iconSize?: number;                 // Size of the icon (optional)
+  iconColor?: string;                // Color of the icon (optional)
+  style?: object;                    // Additional style for the container (optional)
 }
 
 /**
- * A reusable component to display empty states throughout the app
- * with consistent styling and behavior
+ * Empty State View Component
+ * 
+ * Displays a placeholder with icon, message and optional action button
+ * when there is no content to display.
+ * 
+ * @param props - EmptyStateView props
+ * @returns Empty state view component
  */
 const EmptyStateView: React.FC<EmptyStateViewProps> = ({
-  title,
+  icon,
   message,
-  icon = 'search',
   actionText,
   onAction,
+  iconSize = 64,
+  iconColor = '#CCCCCC',
+  style,
 }) => {
-  // Get appropriate icon based on the type
-  const getIcon = () => {
-    switch (icon) {
-      case 'watchlist':
-        return <MaterialIcons name="bookmark-border" size={80} color="#ccc" />;
-      case 'history':
-        return <MaterialIcons name="history" size={80} color="#ccc" />;
-      case 'download':
-        return <MaterialIcons name="file-download" size={80} color="#ccc" />;
-      case 'error':
-        return <MaterialIcons name="error-outline" size={80} color="#ccc" />;
-      case 'network':
-        return <Ionicons name="cloud-offline-outline" size={80} color="#ccc" />;
-      case 'search':
-      default:
-        return <MaterialIcons name="search" size={80} color="#ccc" />;
-    }
-  };
-
   return (
-    <View style={styles.container}>
-      <View style={styles.iconContainer}>{getIcon()}</View>
-      <Text style={styles.title}>{title}</Text>
+    <View style={[styles.container, style]}>
+      <MaterialIcons name={icon} size={iconSize} color={iconColor} />
+      
       <Text style={styles.message}>{message}</Text>
+      
       {actionText && onAction && (
-        <TouchableOpacity style={styles.button} onPress={onAction}>
-          <Text style={styles.buttonText}>{actionText}</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={onAction}>
+          <Text style={styles.actionText}>{actionText}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -56,40 +62,28 @@ const EmptyStateView: React.FC<EmptyStateViewProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 20,
-    backgroundColor: '#fff',
-  },
-  iconContainer: {
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-    textAlign: 'center',
+    minHeight: 200,
   },
   message: {
     fontSize: 16,
-    color: '#666',
+    color: '#666666',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-    paddingHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 20,
   },
-  button: {
+  actionButton: {
     backgroundColor: '#FF6B6B',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 8,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  actionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

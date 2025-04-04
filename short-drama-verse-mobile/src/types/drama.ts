@@ -1,51 +1,163 @@
-// Types for drama series data
+/**
+ * Type definitions for ShortDramaVerse Mobile
+ * 
+ * This file contains type definitions for the drama series,
+ * episodes, user data, and analytics data.
+ */
 
+// User model
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string | null;
+  profilePicture: string | null;
+  bio: string | null;
+  createdAt: Date | null;
+  isAdmin: boolean;
+  coinBalance: number;
+}
+
+// Drama series model
 export interface DramaSeries {
   id: number;
   title: string;
   description: string;
   coverImage: string;
-  genres: string[];
-  releaseYear: number;
-  country: string;
-  language: string;
-  director: string;
-  cast: string[];
+  bannerImage: string | null;
+  genre: string[];
+  tags: string[];
+  releaseDate: string;
+  isCompleted: boolean;
   totalEpisodes: number;
-  averageRating: number | null;
-  totalRatings: number;
-  isFeatured: boolean;
+  averageRating: number;
   viewCount: number;
+  isPremium: boolean;
+  creatorId: number;
+  creatorName: string;
+  isInWatchlist: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+// Episode model
 export interface Episode {
   id: number;
   seriesId: number;
   title: string;
   description: string;
   thumbnailImage: string;
-  videoUrl: string;
-  duration: number; // Duration in seconds
+  duration: number;
+  seasonNumber: number;
   episodeNumber: number;
   releaseDate: string;
-  viewCount: number;
+  videoUrl: string;
   isFree: boolean;
-  premiumPrice?: number; // Price in coins for premium episodes
+  coinCost: number;
+  viewCount: number;
+  isWatched: boolean;
+  watchProgress: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
+// Watch history model
+export interface WatchHistory {
+  id: number;
+  userId: number;
+  episodeId: number;
+  seriesId: number;
+  watchProgress: number;
+  duration: number;
+  completed: boolean;
+  lastWatched: string;
+  episode: {
+    id: number;
+    title: string;
+    thumbnailImage: string;
+    duration: number;
+    episodeNumber: number;
+    seasonNumber: number;
+  };
+  series: {
+    id: number;
+    title: string;
+    coverImage: string;
+  };
+}
+
+// Watchlist item model
+export interface WatchlistItem {
+  id: number;
+  userId: number;
+  seriesId: number;
+  addedAt: string;
+  series: {
+    id: number;
+    title: string;
+    coverImage: string;
+    genre: string[];
+    releaseDate: string;
+    totalEpisodes: number;
+    averageRating: number;
+  };
+}
+
+// User download model
+export interface Download {
+  id: number;
+  episodeId: number;
+  seriesId: number;
+  localPath: string;
+  downloadDate: string;
+  expiryDate: string | null;
+  size: number;
+  isComplete: boolean;
+  episode: {
+    id: number;
+    title: string;
+    thumbnailImage: string;
+    duration: number;
+    episodeNumber: number;
+    seasonNumber: number;
+  };
+  series: {
+    id: number;
+    title: string;
+    coverImage: string;
+  };
+}
+
+// User comment model
+export interface Comment {
+  id: number;
+  userId: number;
+  seriesId: number | null;
+  episodeId: number | null;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: number;
+    username: string;
+    displayName: string | null;
+    profilePicture: string | null;
+  };
+  replies?: Comment[];
+  likesCount: number;
+  isLiked: boolean;
+}
+
+// User rating model
 export interface Rating {
   id: number;
   userId: number;
   seriesId: number;
-  rating: number; // Rating from 1-5
+  score: number;
   comment: string | null;
   createdAt: string;
   updatedAt: string;
-  user?: {
+  user: {
     id: number;
     username: string;
     displayName: string | null;
@@ -53,158 +165,262 @@ export interface Rating {
   };
 }
 
-export interface Watchlist {
-  id: number;
-  userId: number;
-  seriesId: number;
-  createdAt: string;
-  series?: DramaSeries;
-}
-
-export interface WatchlistWithSeries extends Watchlist {
-  series: DramaSeries;
-}
-
-export interface WatchHistory {
-  id: number;
-  userId: number;
-  episodeId: number;
-  seriesId: number;
-  watchedAt: string;
-  progress: number; // Progress in seconds
-  isCompleted: boolean;
-  createdAt: string;
-  updatedAt: string;
-  episode?: Episode;
-  series?: DramaSeries;
-}
-
+// Payment transaction model
 export interface Transaction {
   id: number;
   userId: number;
   amount: number;
-  type: 'purchase' | 'refund' | 'reward';
+  currencyCode: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  type: 'purchase' | 'subscription' | 'refund' | 'gift';
   description: string;
-  status: 'pending' | 'completed' | 'failed';
-  referenceId?: string; // For external payment references
   createdAt: string;
-  episodeId?: number;
-  seriesId?: number;
+  receiptId: string | null;
+  episodeId: number | null;
+  seriesId: number | null;
+  packageId: number | null;
 }
 
-export interface Advertisement {
+// Subscription model
+export interface Subscription {
   id: number;
-  title: string;
-  description: string;
-  imageUrl: string;
-  targetUrl: string; 
-  placement: 'home_banner' | 'series_detail' | 'episode_player' | 'search';
+  userId: number;
+  planId: number;
+  status: 'active' | 'canceled' | 'expired' | 'paused';
   startDate: string;
   endDate: string;
-  impressions: number;
-  clicks: number;
-  isActive: boolean;
+  renewalDate: string | null;
+  canceledAt: string | null;
+  plan: {
+    id: number;
+    name: string;
+    price: number;
+    currencyCode: string;
+    interval: 'monthly' | 'quarterly' | 'yearly';
+    description: string;
+  };
+}
+
+// Notification model
+export interface Notification {
+  id: number;
+  userId: number;
+  title: string;
+  body: string;
+  type: 'episode' | 'series' | 'system' | 'payment' | 'social';
+  isRead: boolean;
   createdAt: string;
-  updatedAt: string;
+  episodeId: number | null;
+  seriesId: number | null;
+  transactionId: number | null;
+  actionUrl: string | null;
 }
 
-export interface SearchResult {
+// Content metrics for analytics
+export interface ContentMetrics {
+  viewsTotal: number;
+  viewsToday: number;
+  viewsWeek: number;
+  viewsMonth: number;
+  completionRate: number;
+  avgWatchTime: number;
+  uniqueViewers: number;
+  subscriberViewers: number;
+  guestViewers: number;
+  shareCount: number;
+  ratingsAvg: number;
+  ratingsCount: number;
+  commentsCount: number;
+  watchlistAdds: number;
+  downloadCount: number;
+  viewsByCountry: Record<string, number>;
+  viewsByDevice: Record<string, number>;
+  viewsByTime: Record<string, number>;
+  viewsByAge: Record<string, number>;
+  viewsByGender: Record<string, number>;
+}
+
+// User metrics for analytics
+export interface UserMetrics {
+  totalWatchTime: number;
+  watchTimeThisWeek: number;
+  episodesWatched: number;
+  episodesCompleted: number;
+  seriesStarted: number;
+  seriesCompleted: number;
+  commentsPosted: number;
+  ratingsGiven: number;
+  watchlistCount: number;
+  downloadsCount: number;
+  favoriteGenres: Record<string, number>;
+  watchTimeByDay: Record<string, number>;
+  watchTimeByHour: Record<string, number>;
+}
+
+// Dashboard metrics for admin analytics
+export interface DashboardMetrics {
+  activeUsers: {
+    total: number;
+    daily: number;
+    weekly: number;
+    monthly: number;
+    change: number;
+  };
+  subscriptions: {
+    total: number;
+    active: number;
+    canceled: number;
+    newToday: number;
+    newWeek: number;
+    churnRate: number;
+  };
+  content: {
+    totalSeries: number;
+    totalEpisodes: number;
+    premiumSeries: number;
+    premiumEpisodes: number;
+    freeSeries: number;
+    freeEpisodes: number;
+  };
+  engagement: {
+    watchTimeTotal: number;
+    watchTimeToday: number;
+    watchTimeWeek: number;
+    avgSessionLength: number;
+    avgCompletionRate: number;
+    avgRating: number;
+  };
+  revenue: {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    total: number;
+    bySubscription: number;
+    byOneTimePurchase: number;
+  };
+}
+
+// Combined analytics data
+export interface AnalyticsData {
+  content?: ContentMetrics;
+  user?: UserMetrics;
+  dashboard?: DashboardMetrics;
+  dateRange?: {
+    start: string;
+    end: string;
+  };
+}
+
+// Settings model
+export interface UserSettings {
+  theme: 'light' | 'dark' | 'system';
+  language: string;
+  downloadQuality: 'low' | 'medium' | 'high' | 'auto';
+  streamingQuality: 'low' | 'medium' | 'high' | 'auto';
+  autoplay: boolean;
+  notifications: {
+    newEpisodes: boolean;
+    offers: boolean;
+    reminders: boolean;
+    updates: boolean;
+  };
+  downloadOverMobile: boolean;
+  subtitlesEnabled: boolean;
+  subtitlesLanguage: string;
+  audioLanguage: string;
+  playbackSpeed: number;
+}
+
+// Search filters model
+export interface SearchFilters {
+  query: string;
+  genres?: string[];
+  tags?: string[];
+  sortBy?: 'relevance' | 'newest' | 'rating' | 'views' | 'title';
+  isPremium?: boolean;
+  isCompleted?: boolean;
+  releaseYear?: number;
+}
+
+// Search results model
+export interface SearchResults {
   series: DramaSeries[];
-  totalCount: number;
-}
-
-export interface HomeContent {
-  featured: DramaSeries[];
-  trending: DramaSeries[];
-  newest: DramaSeries[];
-  continueWatching?: (WatchHistory & { 
-    episode: Episode; 
-    series: DramaSeries;
-  })[];
-  advertisements: Advertisement[];
-}
-
-export interface SeriesDetailsWithRelated {
-  series: DramaSeries;
   episodes: Episode[];
-  ratings: Rating[];
-  isInWatchlist: boolean;
-  related: DramaSeries[];
-}
-
-export interface UserProfile {
-  totalWatched: number;
-  watchTimeMinutes: number;
-  favoriteGenres: { genre: string; count: number }[];
-  recentActivity: WatchHistory[];
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  message?: string;
-  success: boolean;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
+  total: number;
   page: number;
-  limit: number;
-  totalCount: number;
   totalPages: number;
 }
 
-// Request and response types
-export interface RatingRequest {
-  seriesId: number;
-  rating: number;
-  comment?: string;
+// User preferences for recommendations
+export interface UserPreferences {
+  favoriteGenres: string[];
+  favoriteTags: string[];
+  watchedSeries: number[];
+  likedSeries: number[];
+  watchHistory: {
+    episodeId: number;
+    seriesId: number;
+    completionRate: number;
+  }[];
 }
 
-export interface WatchHistoryRequest {
-  episodeId: number;
-  seriesId: number;
-  progress: number;
-  isCompleted: boolean;
+// Creator profile model
+export interface Creator {
+  id: number;
+  name: string;
+  bio: string | null;
+  profileImage: string | null;
+  coverImage: string | null;
+  socialLinks: {
+    website?: string;
+    instagram?: string;
+    twitter?: string;
+    youtube?: string;
+  };
+  seriesCount: number;
+  episodeCount: number;
+  totalViews: number;
+  averageRating: number;
+  series: DramaSeries[];
 }
 
-export interface PurchaseRequest {
-  episodeId: number;
-  seriesId: number;
+// App state model for managing overall app state
+export interface AppState {
+  isNetworkAvailable: boolean;
+  lastSyncTime: string | null;
+  appVersion: string;
+  isFirstLaunch: boolean;
+  hasCompletedOnboarding: boolean;
+  currentlyPlayingEpisode: number | null;
+  appOpenCount: number;
+  deviceId: string;
+  installedDate: string;
+  lastUpdateDate: string | null;
 }
 
-export interface CoinPurchaseRequest {
-  amount: number;
-  paymentMethod: 'credit_card' | 'paypal' | 'apple_pay' | 'google_pay';
-}
-
-// Extended types with additional client-side properties
-export interface EpisodeWithPurchaseStatus extends Episode {
-  isPremium: boolean;
-  purchased: boolean;
-  coinPrice: number;
-}
-
-export interface WatchHistoryWithProgress extends WatchHistory {
-  progressSeconds: number;
-  progressPercentage: number;
-}
-
-// Navigation types
-export interface RootStackParamList {
-  Home: undefined;
-  SeriesDetails: { seriesId: number };
-  EpisodePlayer: { episodeId: number, seriesId: number };
-  SignIn: undefined; 
-  SignUp: undefined;
-  UserProfile: undefined;
-  Search: undefined;
-  Watchlist: undefined;
-  Settings: undefined;
-}
-
-export interface TabParamList {
-  Home: undefined;
-  Search: undefined;
-  Watchlist: undefined;
-  Profile: undefined;
+// Server config for remote configuration
+export interface ServerConfig {
+  featuresEnabled: {
+    downloads: boolean;
+    comments: boolean;
+    subscriptions: boolean;
+    ratings: boolean;
+    sharing: boolean;
+    offlineMode: boolean;
+  };
+  minAppVersion: string;
+  recommendedAppVersion: string;
+  maintenanceMode: boolean;
+  maintenanceMessage: string | null;
+  termsOfServiceUrl: string;
+  privacyPolicyUrl: string;
+  helpCenterUrl: string;
+  contactEmail: string;
+  supportPhone: string | null;
+  socialLinks: {
+    facebook: string | null;
+    twitter: string | null;
+    instagram: string | null;
+    youtube: string | null;
+  };
 }

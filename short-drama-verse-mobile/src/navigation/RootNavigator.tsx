@@ -1,101 +1,89 @@
-import React, { useEffect, useState } from 'react';
+/**
+ * Root Navigator for ShortDramaVerse Mobile
+ * 
+ * This component manages the root navigation structure,
+ * handling authentication flows and main app navigation.
+ */
+
+import React, { useEffect } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '@/hooks/useAuth';
-import MainTabs from './MainTabs';
-import LoadingScreen from '@/screens/common/LoadingScreen';
-import SignInScreen from '@/screens/auth/SignIn';
-import SignUpScreen from '@/screens/auth/SignUp';
-import SeriesDetailsScreen from '@/screens/series/SeriesDetails';
-import EpisodePlayerScreen from '@/screens/series/EpisodePlayer';
-import UserProfileScreen from '@/screens/profile/UserProfile';
-import { RootStackParamList } from '@/types/drama';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
-// Create the navigation stack
+// Screens
+import AuthScreen from '@/screens/auth/AuthScreen';
+import LoadingScreen from '@/screens/common/LoadingScreen';
+import OnboardingScreen from '@/screens/onboarding/OnboardingScreen';
+import MainTabs from './MainTabs';
+
+// Stack navigators
+import SeriesStack from './SeriesStack';
+import ProfileStack from './ProfileStack';
+import AdminStack from './AdminStack';
+
+// Types
+import { RootStackParamList } from '@/types/navigation';
+
+// Create the root stack navigator
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Root Navigator Component
-const RootNavigator = () => {
-  const { user, isLoading } = useAuth();
-  const [initializing, setInitializing] = useState(true);
+/**
+ * Root Navigator Component
+ * 
+ * Manages the primary navigation structure of the app,
+ * including authentication state and screen tracking.
+ * 
+ * @returns Root navigator component
+ */
+const RootNavigator: React.FC = () => {
+  const { user, isLoading, isAuthenticated } = useAuth();
+  const { trackScreenView } = useAnalytics();
   
-  // Add a slight delay to prevent flash of loading state
+  // Track screen views for analytics
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setInitializing(false);
-    }, 1500);
+    const unsubscribe = (state: any) => {
+      const currentRouteName = state.routes[state.index].name;
+      trackScreenView(currentRouteName);
+    };
     
-    return () => clearTimeout(timer);
-  }, []);
+    return () => {
+      // Cleanup if needed
+    };
+  }, [trackScreenView]);
   
-  if (isLoading || initializing) {
-    return <LoadingScreen message="Starting up..." />;
+  // Loading state
+  if (isLoading) {
+    return <LoadingScreen />;
   }
   
   return (
-    <Stack.Navigator 
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: '#121212' },
-        animation: 'slide_from_right',
-      }}
-    >
-      {!user ? (
-        // Auth screens
-        <Stack.Group>
-          <Stack.Screen name="SignIn" component={SignInScreen} />
-          <Stack.Screen name="SignUp" component={SignUpScreen} />
-        </Stack.Group>
-      ) : (
-        // App screens
-        <>
-          <Stack.Screen 
-            name="MainTabs" 
-            component={MainTabs} 
-            options={{ headerShown: false }}
-          />
-          
-          <Stack.Screen 
-            name="SeriesDetails" 
-            component={SeriesDetailsScreen}
-            options={{
-              headerShown: true,
-              headerTransparent: true,
-              headerTitle: '',
-              headerBackTitleVisible: false,
-            }}
-          />
-          
-          <Stack.Screen 
-            name="EpisodePlayer" 
-            component={EpisodePlayerScreen}
-            options={{
-              headerShown: false,
-              animation: 'fade',
-              orientation: 'landscape',
-            }}
-          />
-          
-          <Stack.Screen 
-            name="UserProfile" 
-            component={UserProfileScreen}
-            options={{
-              headerShown: true,
-              headerTitle: 'Profile',
-              headerBackTitleVisible: false,
-            }}
-          />
-          
-          <Stack.Screen 
-            name="LoadingScreen" 
-            component={LoadingScreen} 
-            options={{ 
-              headerShown: false,
-              animation: 'fade',
-            }}
-          />
-        </>
-      )}
-    </Stack.Navigator>
+    <NavigationContainer>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+        }}
+      >
+        {!isAuthenticated ? (
+          // Authentication flow
+          <>
+            <Stack.Screen name="Auth" component={AuthScreen} />
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          </>
+        ) : (
+          // Main app flow
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+            <Stack.Screen name="SeriesStack" component={SeriesStack} />
+            <Stack.Screen name="ProfileStack" component={ProfileStack} />
+            {user?.isAdmin && (
+              <Stack.Screen name="AdminStack" component={AdminStack} />
+            )}
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
 

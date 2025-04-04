@@ -1,3 +1,10 @@
+/**
+ * DramaCard Component for ShortDramaVerse Mobile
+ * 
+ * This component displays drama series or episodes in various layout styles
+ * used throughout the application.
+ */
+
 import React from 'react';
 import {
   View,
@@ -6,425 +13,418 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
   ImageBackground,
 } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList, DramaSeries } from '@/types/drama';
+import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-type SeriesNavigationProp = NativeStackNavigationProp<RootStackParamList, 'SeriesDetails'>;
+// Types
+import { DramaSeries, Episode } from '@/types/drama';
 
+// Get device width for responsive sizing
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width / 2 - 15;
-const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
-// Different card styles
-const CARD_TYPES = {
-  DEFAULT: 'default',
-  FEATURED: 'featured',
-  CONTINUE: 'continue',
-  HORIZONTAL: 'horizontal',
-  MINIMAL: 'minimal',
-};
+/**
+ * Card layout styles
+ */
+export type CardType = 'default' | 'featured' | 'continue' | 'horizontal';
 
-const DEFAULT_IMAGE = 'https://via.placeholder.com/300x450/EEEEEE/999999?text=No+Image';
-
+/**
+ * Props for the DramaCard component
+ */
 interface DramaCardProps {
-  series: DramaSeries;
-  onPress?: () => void;
-  style?: 'default' | 'featured' | 'continue' | 'horizontal' | 'minimal';
-  progress?: number;
-  showBadge?: boolean;
-  isInWatchlist?: boolean;
+  item: DramaSeries | Episode;           // Drama series or episode data
+  type?: CardType;                       // Card layout style
+  onPress: (item: any) => void;          // Item press handler
+  index?: number;                        // Item index in list (for sizing)
+  numColumns?: number;                   // Number of columns in grid
+  showProgress?: boolean;                // Whether to show watch progress
+  isEpisode?: boolean;                   // Whether the item is an episode
 }
 
 /**
- * A reusable card component to display drama series information
- * with different styles based on where it's used in the app
+ * Skeleton props for loading state
+ */
+interface SkeletonProps {
+  type: CardType;
+  index?: number;
+  numColumns?: number;
+}
+
+/**
+ * DramaCard Skeleton Component
+ * 
+ * Displays a placeholder loading animation while content is being fetched.
+ * 
+ * @param props - Skeleton props
+ * @returns Skeleton component
+ */
+export const DramaCardSkeleton: React.FC<SkeletonProps> = ({ 
+  type, 
+  index = 0,
+  numColumns = 2
+}) => {
+  // Card dimensions based on layout type
+  let cardWidth = width * 0.42;
+  let cardHeight = cardWidth * 1.5;
+  let cardStyle = styles.card;
+  
+  if (type === 'featured') {
+    cardWidth = width - 32;
+    cardHeight = width * 0.56;
+    cardStyle = styles.featuredCard;
+  } else if (type === 'continue') {
+    cardWidth = width * 0.65;
+    cardHeight = cardWidth * 0.56;
+    cardStyle = styles.continueCard;
+  } else if (type === 'horizontal') {
+    cardWidth = width * 0.33;
+    cardHeight = cardWidth * 1.5;
+    cardStyle = styles.horizontalCard;
+  } else if (numColumns > 0) {
+    // Grid layout
+    const spacing = 10 * (numColumns - 1);
+    const totalPadding = 32;
+    cardWidth = (width - spacing - totalPadding) / numColumns;
+    cardHeight = cardWidth * 1.5;
+  }
+
+  return (
+    <View style={[
+      cardStyle, 
+      { 
+        width: cardWidth, 
+        height: cardHeight,
+        backgroundColor: '#E0E0E0' 
+      },
+      type === 'default' && { marginLeft: index % numColumns !== 0 ? 10 : 0 }
+    ]}>
+      <View style={styles.shimmerOverlay}>
+        <ActivityIndicator size="small" color="#999999" />
+      </View>
+    </View>
+  );
+};
+
+/**
+ * DramaCard Component
+ * 
+ * Displays a drama series or episode card that can be pressed to view details.
+ * Supports multiple layout styles: default (grid), featured, continue watching, and horizontal.
+ * 
+ * @param props - DramaCard props
+ * @returns DramaCard component
  */
 const DramaCard: React.FC<DramaCardProps> = ({
-  series,
+  item,
+  type = 'default',
   onPress,
-  style = CARD_TYPES.DEFAULT,
-  progress = 0,
-  showBadge = false,
-  isInWatchlist = false,
+  index = 0,
+  numColumns = 2,
+  showProgress = false,
+  isEpisode = false
 }) => {
-  const navigation = useNavigation<SeriesNavigationProp>();
+  // Determine if item is an episode or series
+  const isEpisodeItem = isEpisode || 'seriesId' in item;
+  
+  // Extract properties based on item type
+  const title = isEpisodeItem ? (item as Episode).title : (item as DramaSeries).title;
+  const thumbnail = isEpisodeItem ? (item as Episode).thumbnail : (item as DramaSeries).poster;
+  const progress = isEpisodeItem ? (item as Episode).watchProgress : undefined;
+  
+  // Card dimensions based on layout type
+  let cardWidth = width * 0.42;
+  let cardHeight = cardWidth * 1.5;
+  let cardStyle = styles.card;
+  
+  if (type === 'featured') {
+    cardWidth = width - 32;
+    cardHeight = width * 0.56;
+    cardStyle = styles.featuredCard;
+  } else if (type === 'continue') {
+    cardWidth = width * 0.65;
+    cardHeight = cardWidth * 0.56;
+    cardStyle = styles.continueCard;
+  } else if (type === 'horizontal') {
+    cardWidth = width * 0.33;
+    cardHeight = cardWidth * 1.5;
+    cardStyle = styles.horizontalCard;
+  } else if (numColumns > 0) {
+    // Grid layout
+    const spacing = 10 * (numColumns - 1);
+    const totalPadding = 32;
+    cardWidth = (width - spacing - totalPadding) / numColumns;
+    cardHeight = cardWidth * 1.5;
+  }
 
-  const handlePress = () => {
-    if (onPress) {
-      onPress();
-    } else {
-      navigation.navigate('SeriesDetails', { seriesId: series.id });
-    }
-  };
-
-  // Render different card types
-  if (style === CARD_TYPES.FEATURED) {
-    // Featured card - larger with more detail
-    return (
-      <TouchableOpacity onPress={handlePress} style={styles.featuredCard}>
-        <ImageBackground
-          source={{ uri: series.coverImage || DEFAULT_IMAGE }}
-          style={styles.featuredImage}
-          imageStyle={{ borderRadius: 8 }}
-        >
-          <View style={styles.featuredGradient}>
-            {isInWatchlist && (
-              <View style={styles.watchlistBadge}>
-                <MaterialIcons name="bookmark" size={18} color="#fff" />
-              </View>
-            )}
+  // Calculate progress percentage
+  const progressPercentage = (progress && showProgress)
+    ? Math.min(Math.max(progress.current / progress.total * 100, 0), 100)
+    : 0;
+    
+  // Render the drama card
+  return (
+    <TouchableOpacity
+      style={[
+        cardStyle,
+        { width: cardWidth, height: cardHeight },
+        type === 'default' && { marginLeft: index % numColumns !== 0 ? 10 : 0 }
+      ]}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
+      <ImageBackground
+        source={{ uri: thumbnail }}
+        style={styles.thumbnail}
+        imageStyle={{ borderRadius: 8 }}
+        resizeMode="cover"
+      >
+        {type === 'featured' && (
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.9)']}
+            style={styles.gradient}
+          >
             <View style={styles.featuredContent}>
-              <Text style={styles.featuredTitle}>{series.title}</Text>
-              <View style={styles.featuredMeta}>
-                <Text style={styles.featuredYear}>{series.releaseYear}</Text>
-                <Text style={styles.featuredDot}>•</Text>
-                <Text style={styles.featuredEpisodes}>
-                  {series.totalEpisodes} Episodes
-                </Text>
-                {series.averageRating && (
-                  <>
-                    <Text style={styles.featuredDot}>•</Text>
-                    <Ionicons name="star" size={14} color="#FFD700" />
-                    <Text style={styles.featuredRating}>
-                      {series.averageRating.toFixed(1)}
-                    </Text>
-                  </>
-                )}
-              </View>
-              <Text numberOfLines={2} style={styles.featuredDescription}>
-                {series.description}
+              <Text style={styles.featuredTitle} numberOfLines={2}>
+                {title}
               </Text>
+              
+              {!(item as DramaSeries).isFree && (
+                <View style={styles.premiumBadge}>
+                  <MaterialIcons name="star" size={12} color="#FFFFFF" />
+                  <Text style={styles.premiumText}>Premium</Text>
+                </View>
+              )}
             </View>
-          </View>
-        </ImageBackground>
-      </TouchableOpacity>
-    );
-  }
-
-  if (style === CARD_TYPES.CONTINUE) {
-    // Continue watching card with progress bar
-    return (
-      <TouchableOpacity onPress={handlePress} style={styles.continueCard}>
-        <Image
-          source={{ uri: series.coverImage || DEFAULT_IMAGE }}
-          style={styles.continueImage}
-        />
-        <View style={styles.progressContainer}>
-          <View
-            style={[styles.progressBar, { width: `${progress}%` }]}
-          />
-        </View>
-        <View style={styles.continueContent}>
-          <Text numberOfLines={1} style={styles.continueTitle}>
-            {series.title}
-          </Text>
-          <Text numberOfLines={1} style={styles.continueInfo}>
-            Continue Episode 3
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
-  if (style === CARD_TYPES.HORIZONTAL) {
-    // Horizontal card for lists
-    return (
-      <TouchableOpacity onPress={handlePress} style={styles.horizontalCard}>
-        <Image
-          source={{ uri: series.coverImage || DEFAULT_IMAGE }}
-          style={styles.horizontalImage}
-        />
-        <View style={styles.horizontalContent}>
-          <Text numberOfLines={1} style={styles.horizontalTitle}>
-            {series.title}
-          </Text>
-          <Text numberOfLines={1} style={styles.horizontalInfo}>
-            {series.releaseYear} • {series.totalEpisodes} Episodes
-          </Text>
-          <Text numberOfLines={2} style={styles.horizontalDescription}>
-            {series.description}
-          </Text>
-          {series.averageRating && (
-            <View style={styles.horizontalRating}>
-              <Ionicons name="star" size={12} color="#FFD700" />
-              <Text style={styles.ratingText}>
-                {series.averageRating.toFixed(1)}
-              </Text>
-            </View>
-          )}
-        </View>
-        {isInWatchlist && (
-          <View style={styles.horizontalWatchlistBadge}>
-            <MaterialIcons name="bookmark" size={16} color="#FF6B6B" />
+          </LinearGradient>
+        )}
+        
+        {type !== 'featured' && !(item as DramaSeries).isFree && (
+          <View style={styles.premiumBadgeSmall}>
+            <MaterialIcons name="star" size={10} color="#FFFFFF" />
           </View>
         )}
-      </TouchableOpacity>
-    );
-  }
-
-  // Default card style
-  return (
-    <TouchableOpacity onPress={handlePress} style={styles.card}>
-      <Image
-        source={{ uri: series.coverImage || DEFAULT_IMAGE }}
-        style={styles.image}
-      />
-      {showBadge && series.isFeatured && (
-        <View style={styles.featuredBadge}>
-          <Text style={styles.featuredBadgeText}>Featured</Text>
-        </View>
-      )}
-      {isInWatchlist && (
-        <View style={styles.bookmarkBadge}>
-          <MaterialIcons name="bookmark" size={16} color="#fff" />
-        </View>
-      )}
-      <View style={styles.cardContent}>
-        <Text numberOfLines={1} style={styles.title}>
-          {series.title}
-        </Text>
-        <View style={styles.meta}>
-          <Text style={styles.year}>{series.releaseYear}</Text>
-          {series.averageRating && (
-            <View style={styles.rating}>
-              <Ionicons name="star" size={12} color="#FFD700" />
-              <Text style={styles.ratingText}>
-                {series.averageRating.toFixed(1)}
+        
+        {type === 'continue' && (
+          <View style={styles.continueInfoOverlay}>
+            <View style={styles.episodeInfo}>
+              <Text style={styles.episodeTitle} numberOfLines={1}>
+                {title}
               </Text>
+              <Text style={styles.seriesTitle} numberOfLines={1}>
+                {(item as Episode).seriesTitle}
+              </Text>
+            </View>
+            <View style={styles.playButton}>
+              <MaterialIcons name="play-arrow" size={24} color="#FFFFFF" />
+            </View>
+          </View>
+        )}
+      </ImageBackground>
+      
+      {type !== 'featured' && type !== 'continue' && (
+        <View style={styles.infoContainer}>
+          <Text style={styles.title} numberOfLines={2}>
+            {title}
+          </Text>
+          
+          {!isEpisodeItem && (
+            <View style={styles.metaInfo}>
+              <Text style={styles.metaText}>
+                {(item as DramaSeries).episodeCount} episodes
+              </Text>
+              <View style={styles.ratingContainer}>
+                <MaterialIcons name="star" size={12} color="#FFD700" />
+                <Text style={styles.ratingText}>
+                  {(item as DramaSeries).rating.toFixed(1)}
+                </Text>
+              </View>
             </View>
           )}
         </View>
-      </View>
+      )}
+      
+      {/* Progress bar for continue watching */}
+      {showProgress && progressPercentage > 0 && (
+        <View style={styles.progressContainer}>
+          <View 
+            style={[
+              styles.progressBar, 
+              { width: `${progressPercentage}%` }
+            ]} 
+          />
+        </View>
+      )}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  // Default card styles
   card: {
-    width: CARD_WIDTH,
-    marginBottom: 15,
     borderRadius: 8,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    marginBottom: 16,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  featuredCard: {
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
     elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
   },
-  image: {
+  continueCard: {
+    borderRadius: 8,
+    marginRight: 12,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  horizontalCard: {
+    borderRadius: 8,
+    marginRight: 12,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  thumbnail: {
+    flex: type === 'featured' || type === 'continue' ? 1 : 0.7,
+    justifyContent: 'flex-end',
     width: '100%',
-    height: CARD_HEIGHT - 50,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    height: undefined,
+    aspectRatio: type === 'continue' ? 16/9 : 2/3,
   },
-  cardContent: {
+  infoContainer: {
     padding: 8,
+    flex: 0.3,
   },
   title: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#333333',
     marginBottom: 4,
   },
-  meta: {
+  metaInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  year: {
+  metaText: {
     fontSize: 12,
-    color: '#666',
+    color: '#666666',
   },
-  rating: {
+  ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   ratingText: {
     fontSize: 12,
-    color: '#666',
+    color: '#666666',
     marginLeft: 2,
   },
-  featuredBadge: {
+  gradient: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  featuredBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  bookmarkBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    padding: 4,
-    borderRadius: 4,
-  },
-
-  // Featured card styles
-  featuredCard: {
-    width: width - 30,
-    height: 200,
-    marginBottom: 15,
-    borderRadius: 8,
-  },
-  featuredImage: {
-    width: '100%',
-    height: '100%',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '70%',
     justifyContent: 'flex-end',
-  },
-  featuredGradient: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 8,
   },
   featuredContent: {
-    padding: 12,
+    padding: 16,
   },
   featuredTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
+    color: '#FFFFFF',
+    marginBottom: 8,
   },
-  featuredMeta: {
+  premiumBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    backgroundColor: '#FF6B6B',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
   },
-  featuredYear: {
-    fontSize: 12,
-    color: '#eee',
-  },
-  featuredDot: {
-    fontSize: 12,
-    color: '#eee',
-    marginHorizontal: 4,
-  },
-  featuredEpisodes: {
-    fontSize: 12,
-    color: '#eee',
-  },
-  featuredRating: {
-    fontSize: 12,
-    color: '#eee',
-    marginLeft: 2,
-  },
-  featuredDescription: {
-    fontSize: 12,
-    color: '#ddd',
-  },
-  watchlistBadge: {
+  premiumBadgeSmall: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: '#FF6B6B',
     padding: 4,
     borderRadius: 4,
   },
-
-  // Continue watching card styles
-  continueCard: {
-    width: 140,
-    height: 180,
-    marginRight: 10,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  continueImage: {
-    width: '100%',
-    height: 140,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+  premiumText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginLeft: 4,
   },
   progressContainer: {
     height: 3,
     width: '100%',
     backgroundColor: '#E0E0E0',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
   },
   progressBar: {
     height: '100%',
     backgroundColor: '#FF6B6B',
   },
-  continueContent: {
-    padding: 8,
-  },
-  continueTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  continueInfo: {
-    fontSize: 11,
-    color: '#666',
-  },
-
-  // Horizontal card styles
-  horizontalCard: {
-    flexDirection: 'row',
-    width: '100%',
-    height: 100,
-    marginBottom: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  horizontalImage: {
-    width: 70,
-    height: '100%',
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
-  },
-  horizontalContent: {
-    flex: 1,
-    padding: 10,
+  shimmerOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
-  },
-  horizontalTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 2,
-  },
-  horizontalInfo: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  horizontalDescription: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 4,
-  },
-  horizontalRating: {
-    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
-  horizontalWatchlistBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
+  continueInfoOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  episodeInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  episodeTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  seriesTitle: {
+    color: '#CCCCCC',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  playButton: {
+    backgroundColor: 'rgba(255, 107, 107, 0.9)',
+    borderRadius: 24,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

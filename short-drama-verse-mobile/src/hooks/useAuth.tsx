@@ -1,258 +1,323 @@
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as api from '@/services/api';
-import * as storage from '@/services/storage';
-import { apiRequest } from '@/lib/queryClient';
+/**
+ * Authentication Hook for ShortDramaVerse Mobile
+ * 
+ * This hook manages user authentication state and provides
+ * methods for login, registration, logout, and profile management.
+ */
+
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
+import api from '@/services/api';
+import analytics from '@/services/analytics';
+import storage from '@/services/storage';
+import { AnalyticsEventType } from '@/services/analytics';
+import { User } from '@/types/drama';
 
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  displayName: string | null;
-  profilePicture: string | null;
-  bio: string | null;
-  createdAt: string;
-  isAdmin: boolean;
-  coinBalance: number;
-}
-
-interface AuthResponse {
-  user: User;
-  token: string;
-}
-
-interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-interface RegisterCredentials {
-  username: string;
-  email: string;
-  password: string;
-  displayName?: string;
-}
-
-interface UpdateProfileData {
-  displayName?: string;
-  bio?: string;
-  email?: string;
-  currentPassword?: string;
-  newPassword?: string;
-}
-
-// Custom hook for login mutation
-function useLoginMutation() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (credentials: LoginCredentials) => {
-      try {
-        const response: AuthResponse = await api.apiRequest('POST', api.endpoints.auth.login, credentials);
-        
-        // Save token and user data
-        await storage.setToken(response.token);
-        await storage.setUserData(response.user);
-        
-        return response.user;
-      } catch (error) {
-        console.error('Login error:', error);
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
-    },
-    onError: (error: Error) => {
-      // Handle login error
-      console.error('Login mutation error:', error);
-      Alert.alert('Login Failed', error.message || 'Failed to log in. Please try again.');
-    },
-  });
-}
-
-// Custom hook for registration mutation
-function useRegisterMutation() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (credentials: RegisterCredentials) => {
-      try {
-        const response: AuthResponse = await api.apiRequest('POST', api.endpoints.auth.register, credentials);
-        
-        // Save token and user data
-        await storage.setToken(response.token);
-        await storage.setUserData(response.user);
-        
-        return response.user;
-      } catch (error) {
-        console.error('Registration error:', error);
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
-    },
-    onError: (error: Error) => {
-      // Handle registration error
-      console.error('Registration mutation error:', error);
-      Alert.alert('Registration Failed', error.message || 'Failed to register. Please try again.');
-    },
-  });
-}
-
-// Custom hook for logout mutation
-function useLogoutMutation() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async () => {
-      try {
-        await api.apiRequest('POST', api.endpoints.auth.logout);
-        
-        // Clear local storage
-        await storage.removeToken();
-        await storage.removeUserData();
-      } catch (error) {
-        console.error('Logout error:', error);
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      // Reset auth state and invalidate queries
-      queryClient.setQueryData(['/api/user'], null);
-      queryClient.invalidateQueries();
-    },
-    onError: (error: Error) => {
-      // Handle logout error
-      console.error('Logout mutation error:', error);
-      Alert.alert('Logout Failed', error.message || 'Failed to log out. Please try again.');
-    },
-  });
-}
-
-// Custom hook for profile update mutation
-function useUpdateProfileMutation() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (data: UpdateProfileData) => {
-      try {
-        const response: User = await api.apiRequest('PATCH', api.endpoints.profile.update, data);
-        
-        // Update stored user data
-        await storage.setUserData(response);
-        
-        return response;
-      } catch (error) {
-        console.error('Profile update error:', error);
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      // Invalidate user data
-      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
-    },
-    onError: (error: Error) => {
-      // Handle profile update error
-      console.error('Profile update mutation error:', error);
-      Alert.alert('Update Failed', error.message || 'Failed to update profile. Please try again.');
-    },
-  });
-}
-
-// Context type definition
-interface AuthContextType {
+/**
+ * Authentication Context Type
+ */
+export interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  error: Error | null;
-  loginMutation: ReturnType<typeof useLoginMutation>;
-  registerMutation: ReturnType<typeof useRegisterMutation>;
-  logoutMutation: ReturnType<typeof useLogoutMutation>;
-  updateProfileMutation: ReturnType<typeof useUpdateProfileMutation>;
+  isAuthenticated: boolean;
+  error: string | null;
+  login: (username: string, password: string) => Promise<void>;
+  register: (userData: RegisterData) => Promise<void>;
+  logout: () => Promise<void>;
+  updateProfile: (profileData: Partial<User>) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  clearError: () => void;
 }
 
-// Create auth context
-export const AuthContext = createContext<AuthContextType | null>(null);
+/**
+ * Register Data Interface
+ */
+export interface RegisterData {
+  username: string;
+  email: string;
+  password: string;
+  displayName: string;
+}
 
-// Auth provider component
-export const AuthProvider = ({ children }) => {
-  const [initialLoading, setInitialLoading] = useState(true);
-  const queryClient = useQueryClient();
-  
-  // Query hook for user data
-  const { 
-    data: user,
-    isLoading: isLoadingUser,
-    error
-  } = useQuery({
-    queryKey: ['/api/user'],
-    queryFn: async () => {
-      try {
-        return await apiRequest('GET', api.endpoints.auth.user);
-      } catch (error) {
-        if (error instanceof api.ApiError && error.status === 401) {
-          return null;
-        }
-        throw error;
-      }
-    },
-    // Don't fetch until we've checked for stored credentials
-    enabled: !initialLoading
-  });
-  
-  // Mutations
-  const loginMutation = useLoginMutation();
-  const registerMutation = useRegisterMutation();
-  const logoutMutation = useLogoutMutation();
-  const updateProfileMutation = useUpdateProfileMutation();
-  
-  // On mount, check if we have stored credentials
+/**
+ * Authentication Provider Props Interface
+ */
+interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+// Create authentication context
+const AuthContext = createContext<AuthContextType | null>(null);
+
+/**
+ * Authentication Provider Component
+ * 
+ * Manages authentication state and provides authentication
+ * functions to child components.
+ * 
+ * @param props - AuthProviderProps
+ * @returns Auth provider component
+ */
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Check for existing authentication session on app load
+   */
   useEffect(() => {
-    async function restoreUser() {
+    const loadUser = async () => {
       try {
-        const storedToken = await storage.getToken();
-        const storedUser = await storage.getUserData();
-        
-        if (storedToken && storedUser) {
-          // If we have stored credentials, set them in the query client cache
-          queryClient.setQueryData(['/api/user'], storedUser);
+        // Check if authentication token exists
+        if (api.isAuthenticated()) {
+          // Fetch user profile
+          const userData = await api.get<User>('/auth/me');
+          setUser(userData);
+          
+          // Set user ID in analytics
+          analytics.setUserId(userData.id);
+          
+          // Store user data
+          await storage.storeUserProfile(userData);
+        } else {
+          // Try to load from local storage as fallback
+          const storedUser = await storage.getUserProfile<User>();
+          if (storedUser) {
+            setUser(storedUser);
+            analytics.setUserId(storedUser.id);
+          }
         }
-      } catch (error) {
-        console.error('Failed to restore user session:', error);
+      } catch (err) {
+        console.error('Error loading user:', err);
+        setError('Failed to load user profile');
       } finally {
-        setInitialLoading(false);
+        setIsLoading(false);
       }
-    }
+    };
     
-    restoreUser();
-  }, [queryClient]);
-  
-  // Combined loading state
-  const isLoading = initialLoading || isLoadingUser;
-  
+    loadUser();
+  }, []);
+
+  /**
+   * Login user
+   * 
+   * @param username - Username
+   * @param password - Password
+   */
+  const login = async (username: string, password: string): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Authenticate user
+      const response = await api.post<{ user: User; token: string; refreshToken: string }>(
+        '/auth/login',
+        { username, password }
+      );
+      
+      // Set authentication token
+      await api.setAuthToken(response.token, response.refreshToken);
+      
+      // Set user data
+      setUser(response.user);
+      
+      // Store user data
+      await storage.storeUserProfile(response.user);
+      
+      // Set user ID in analytics and track login event
+      analytics.setUserId(response.user.id);
+      analytics.trackEvent(AnalyticsEventType.LOGIN, {
+        userId: response.user.id,
+        username: response.user.username,
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to login';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Register new user
+   * 
+   * @param userData - User registration data
+   */
+  const register = async (userData: RegisterData): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Register user
+      const response = await api.post<{ user: User; token: string; refreshToken: string }>(
+        '/auth/register',
+        userData
+      );
+      
+      // Set authentication token
+      await api.setAuthToken(response.token, response.refreshToken);
+      
+      // Set user data
+      setUser(response.user);
+      
+      // Store user data
+      await storage.storeUserProfile(response.user);
+      
+      // Set user ID in analytics and track registration event
+      analytics.setUserId(response.user.id);
+      analytics.trackEvent(AnalyticsEventType.REGISTRATION, {
+        userId: response.user.id,
+        username: response.user.username,
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to register';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Logout user
+   */
+  const logout = async (): Promise<void> => {
+    try {
+      setIsLoading(true);
+      
+      // Track logout event
+      if (user) {
+        analytics.trackEvent(AnalyticsEventType.LOGOUT, {
+          userId: user.id,
+          username: user.username,
+        });
+      }
+      
+      // Call logout API
+      await api.post('/auth/logout');
+      
+      // Clear authentication token
+      await api.clearAuthToken();
+      
+      // Clear user ID in analytics
+      analytics.setUserId(null);
+      
+      // Remove user data
+      await storage.removeData(storage.StorageKey.USER_PROFILE);
+      
+      // Clear user state
+      setUser(null);
+    } catch (err) {
+      console.error('Error during logout:', err);
+      
+      // Force logout anyway
+      await api.clearAuthToken();
+      await storage.removeData(storage.StorageKey.USER_PROFILE);
+      analytics.setUserId(null);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Update user profile
+   * 
+   * @param profileData - Profile data to update
+   */
+  const updateProfile = async (profileData: Partial<User>): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Update profile
+      const updatedUser = await api.put<User>('/auth/profile', profileData);
+      
+      // Update user state
+      setUser(updatedUser);
+      
+      // Update stored user data
+      await storage.storeUserProfile(updatedUser);
+      
+      // Show success message
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update profile';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Reset password
+   * 
+   * @param email - User email
+   */
+  const resetPassword = async (email: string): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Reset password
+      await api.post('/auth/reset-password', { email });
+      
+      // Show success message
+      Alert.alert(
+        'Password Reset',
+        'If an account exists with this email, you will receive password reset instructions.'
+      );
+    } catch (err) {
+      // Show same message even if error to prevent user enumeration
+      Alert.alert(
+        'Password Reset',
+        'If an account exists with this email, you will receive password reset instructions.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Clear error state
+   */
+  const clearError = (): void => {
+    setError(null);
+  };
+
+  // Create context value
+  const value: AuthContextType = {
+    user,
+    isLoading,
+    isAuthenticated: !!user,
+    error,
+    login,
+    register,
+    logout,
+    updateProfile,
+    resetPassword,
+    clearError,
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user: user || null,
-        isLoading,
-        error,
-        loginMutation,
-        registerMutation,
-        logoutMutation,
-        updateProfileMutation
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Hook to use the auth context
-export const useAuth = () => {
+/**
+ * Use Auth Hook
+ * 
+ * Provides access to authentication context.
+ * 
+ * @returns Authentication context
+ * @throws Error if used outside AuthProvider
+ */
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   
   if (!context) {

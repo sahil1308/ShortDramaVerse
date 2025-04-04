@@ -1,40 +1,60 @@
+/**
+ * Main Tab Navigator for ShortDramaVerse Mobile
+ * 
+ * This component manages the bottom tab navigation structure
+ * of the main application flow.
+ */
+
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { TabParamList } from '@/types/drama';
+import { useTheme } from '@react-navigation/native';
+import { View, StyleSheet, Platform } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 
-// Import screens
+// Screens
 import HomeScreen from '@/screens/home/HomeScreen';
-import SearchScreen from '@/screens/search/SearchScreen';
+import ExploreScreen from '@/screens/explore/ExploreScreen';
 import WatchlistScreen from '@/screens/watchlist/WatchlistScreen';
+import DownloadsScreen from '@/screens/downloads/DownloadsScreen';
 import ProfileScreen from '@/screens/profile/ProfileScreen';
 
-// Create bottom tab navigator
-const Tab = createBottomTabNavigator<TabParamList>();
+// Types
+import { MainTabsParamList } from '@/types/navigation';
 
-// Colors constants
-const colors = {
-  primary: '#E50914',
-  background: '#121212',
-  tabBg: '#1A1A1A',
-  active: '#E50914',
-  inactive: '#777777',
-  text: '#FFFFFF',
-};
+// Create the bottom tab navigator
+const Tab = createBottomTabNavigator<MainTabsParamList>();
 
-const MainTabs = () => {
+/**
+ * Main Tabs Component
+ * 
+ * Manages the bottom tab navigation for the main app screens.
+ * 
+ * @returns Main tabs navigator component
+ */
+const MainTabs: React.FC = () => {
+  const theme = useTheme();
   const { user } = useAuth();
   
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: colors.active,
-        tabBarInactiveTintColor: colors.inactive,
-        tabBarShowLabel: false,
         headerShown: false,
+        tabBarActiveTintColor: '#FF6B6B',
+        tabBarInactiveTintColor: '#777777',
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 1,
+          borderTopColor: '#EEEEEE',
+          paddingBottom: Platform.OS === 'android' ? 8 : 25,
+          paddingTop: 8,
+          height: Platform.OS === 'android' ? 60 : 80,
+        },
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginTop: -5,
+        },
       }}
     >
       <Tab.Screen
@@ -42,23 +62,17 @@ const MainTabs = () => {
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon icon="home" label="Home" color={color} />
-          ),
-          tabBarLabel: ({ color }) => (
-            <TabLabel label="Home" color={color} />
+            <MaterialIcons name="home" color={color} size={size} />
           ),
         }}
       />
       
       <Tab.Screen
-        name="Search"
-        component={SearchScreen}
+        name="Explore"
+        component={ExploreScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon icon="search" label="Search" color={color} />
-          ),
-          tabBarLabel: ({ color }) => (
-            <TabLabel label="Search" color={color} />
+            <MaterialIcons name="explore" color={color} size={size} />
           ),
         }}
       />
@@ -68,10 +82,17 @@ const MainTabs = () => {
         component={WatchlistScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon icon="bookmark" label="Watchlist" color={color} />
+            <MaterialIcons name="bookmark" color={color} size={size} />
           ),
-          tabBarLabel: ({ color }) => (
-            <TabLabel label="Watchlist" color={color} />
+        }}
+      />
+      
+      <Tab.Screen
+        name="Downloads"
+        component={DownloadsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="file-download" color={color} size={size} />
           ),
         }}
       />
@@ -81,15 +102,12 @@ const MainTabs = () => {
         component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon 
-              icon="person" 
-              label="Profile" 
-              color={color} 
-              badge={user?.coinBalance ? user.coinBalance.toString() : null}
-            />
-          ),
-          tabBarLabel: ({ color }) => (
-            <TabLabel label="Profile" color={color} />
+            <View>
+              {user?.isAdmin && (
+                <View style={styles.adminBadge} />
+              )}
+              <MaterialIcons name="person" color={color} size={size} />
+            </View>
           ),
         }}
       />
@@ -97,76 +115,16 @@ const MainTabs = () => {
   );
 };
 
-// Custom Tab Bar Icon component
-const TabBarIcon = ({ icon, label, color, badge = null }) => {
-  return (
-    <View style={styles.iconContainer}>
-      <Ionicons name={`${icon}${color === colors.active ? '' : '-outline'}`} size={22} color={color} />
-      {badge ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-};
-
-// Custom Tab Label component
-const TabLabel = ({ label, color }) => {
-  return <Text style={[styles.tabLabel, { color }]}>{label}</Text>;
-};
-
-// Custom Tab Bar Button component
-const TabBarButton = ({ children, style }) => {
-  return (
-    <View style={[styles.tabBarButton, style]}>
-      {children}
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: colors.tabBg,
-    borderTopWidth: 0,
-    elevation: 10,
-    height: Platform.OS === 'ios' ? 85 : 60,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 5,
-    paddingTop: 5,
-  },
-  iconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    width: 30,
-    height: 30,
-  },
-  tabLabel: {
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  tabBarButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
+  adminBadge: {
     position: 'absolute',
-    top: -5,
-    right: -10,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: colors.text,
-    fontSize: 10,
-    fontWeight: 'bold',
+    right: -4,
+    top: -4,
+    backgroundColor: '#FF6B6B',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    zIndex: 1,
   },
 });
 

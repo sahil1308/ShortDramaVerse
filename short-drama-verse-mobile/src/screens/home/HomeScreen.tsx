@@ -1,548 +1,314 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  FlatList,
-  Image,
-  Dimensions,
+/**
+ * Home Screen for ShortDramaVerse Mobile
+ * 
+ * This is the main screen users see after login, featuring personalized 
+ * drama recommendations, continue watching section, and trending content.
+ */
+
+import React, { useEffect, useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
   RefreshControl,
-  ActivityIndicator,
-  StatusBar as RNStatusBar,
-  Platform,
+  StatusBar,
+  TouchableOpacity
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '@/types/drama';
+import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import api, { endpoints } from '@/services/api';
+
+// Components
+import DramaCarousel from '@/components/DramaCarousel';
+import DramaRow from '@/components/DramaRow';
+import EmptyStateView from '@/components/EmptyStateView';
+
+// Hooks
 import { useAuth } from '@/hooks/useAuth';
-import { DramaSeries, Advertisement } from '@/types/drama';
-import DramaCard from '@/components/DramaCard';
-import LoadingScreen from '@/screens/common/LoadingScreen';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
-// Get screen dimensions
-const { width, height } = Dimensions.get('window');
+// Types and services
+import { DramaSeries, Episode } from '@/types/drama';
+import apiService from '@/services/api';
+import { EventType } from '@/services/analytics';
 
-// Colors
-const colors = {
-  primary: '#E50914',
-  background: '#121212',
-  cardBg: '#1E1E1E',
-  text: '#FFFFFF',
-  textSecondary: '#AAAAAA',
-  inactive: '#555555',
-  premium: '#FFD700',
-};
-
-type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-const HomeScreen = () => {
-  const navigation = useNavigation<HomeScreenNavigationProp>();
-  const { user } = useAuth();
+/**
+ * Home Screen Component
+ * 
+ * Main landing screen with personalized content after user login.
+ * 
+ * @returns Home screen component
+ */
+const HomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
-  const [categories, setCategories] = useState<string[]>(['Trending', 'New Releases', 'Romance', 'Comedy', 'Drama', 'Thriller']);
+  const navigation = useNavigation();
+  const { user } = useAuth();
+  const { trackScreenView, trackEvent } = useAnalytics();
   
-  // Featured content query
-  const {
+  // Track screen view on component mount
+  useEffect(() => {
+    trackScreenView('Home');
+  }, [trackScreenView]);
+  
+  // Fetch featured drama series
+  const { 
     data: featuredSeries,
-    isLoading: isFeaturedLoading,
-    error: featuredError,
-    refetch: refetchFeatured,
+    isLoading: isLoadingFeatured,
+    refetch: refetchFeatured
   } = useQuery({
-    queryKey: ['dramaSeries', 'featured'],
-    queryFn: () => api.get<DramaSeries[]>(`${endpoints.dramaSeries.all}?featured=true&limit=1`),
+    queryKey: ['featuredSeries'],
+    queryFn: () => apiService.getFeaturedSeries(),
   });
   
-  // New releases query
-  const {
-    data: newReleases,
-    isLoading: isNewReleasesLoading,
-    error: newReleasesError,
-    refetch: refetchNewReleases,
+  // Fetch continue watching content
+  const { 
+    data: continueWatching,
+    isLoading: isLoadingContinue,
+    refetch: refetchContinue
   } = useQuery({
-    queryKey: ['dramaSeries', 'newReleases'],
-    queryFn: () => api.get<DramaSeries[]>(`${endpoints.dramaSeries.all}?sort=releaseDate&order=desc&limit=10`),
+    queryKey: ['continueWatching'],
+    queryFn: () => apiService.getContinueWatching(),
+    enabled: !!user, // Only run if user is logged in
   });
   
-  // Trending series query
-  const {
+  // Fetch trending series
+  const { 
     data: trendingSeries,
-    isLoading: isTrendingLoading,
-    error: trendingError,
-    refetch: refetchTrending,
+    isLoading: isLoadingTrending,
+    refetch: refetchTrending
   } = useQuery({
-    queryKey: ['dramaSeries', 'trending'],
-    queryFn: () => api.get<DramaSeries[]>(`${endpoints.dramaSeries.all}?sort=viewCount&order=desc&limit=10`),
+    queryKey: ['trendingSeries'],
+    queryFn: () => apiService.getTrendingSeries(),
   });
   
-  // Popular romance series query
-  const {
-    data: romanceSeries,
-    isLoading: isRomanceLoading,
-    error: romanceError,
-    refetch: refetchRomance,
+  // Fetch new releases
+  const { 
+    data: newReleases,
+    isLoading: isLoadingNew,
+    refetch: refetchNew
   } = useQuery({
-    queryKey: ['dramaSeries', 'romance'],
-    queryFn: () => api.get<DramaSeries[]>(`${endpoints.dramaSeries.byGenre('romance')}?limit=10`),
+    queryKey: ['newReleases'],
+    queryFn: () => apiService.getNewReleases(),
   });
   
-  // Popular comedy series query
-  const {
-    data: comedySeries,
-    isLoading: isComedyLoading,
-    error: comedyError,
-    refetch: refetchComedy,
-  } = useQuery({
-    queryKey: ['dramaSeries', 'comedy'],
-    queryFn: () => api.get<DramaSeries[]>(`${endpoints.dramaSeries.byGenre('comedy')}?limit=10`),
-  });
-  
-  // Banner ads query
-  const {
-    data: bannerAds,
-    isLoading: isAdsLoading,
-    error: adsError,
-    refetch: refetchAds,
-  } = useQuery({
-    queryKey: ['advertisements', 'home-banner'],
-    queryFn: () => api.get<Advertisement[]>(`${endpoints.advertisements.active('home-banner')}`),
-  });
-  
-  // Pull to refresh
-  const onRefresh = useCallback(async () => {
+  // Pull-to-refresh handler
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([
-      refetchFeatured(),
-      refetchNewReleases(),
-      refetchTrending(),
-      refetchRomance(),
-      refetchComedy(),
-      refetchAds(),
-    ]);
-    setRefreshing(false);
-  }, [refetchFeatured, refetchNewReleases, refetchTrending, refetchRomance, refetchComedy, refetchAds]);
-  
-  // Navigate to series details
-  const navigateToSeries = (seriesId: number) => {
-    navigation.navigate('SeriesDetails', { seriesId });
-  };
-  
-  // Handle ad click
-  const handleAdClick = async (ad: Advertisement) => {
+    
     try {
-      await api.post(`${endpoints.advertisements.click(ad.id)}`);
-      // Open ad URL if needed
+      await Promise.all([
+        refetchFeatured(),
+        refetchContinue(),
+        refetchTrending(),
+        refetchNew()
+      ]);
     } catch (error) {
-      console.error('Error registering ad click:', error);
+      console.error('Error refreshing home screen data:', error);
+    } finally {
+      setRefreshing(false);
     }
+  }, [refetchFeatured, refetchContinue, refetchTrending, refetchNew]);
+  
+  // Handler for opening search screen
+  const handleSearchPress = () => {
+    trackEvent(EventType.SEARCH_OPENED, { source: 'home_screen' });
+    navigation.navigate('Search' as never);
   };
   
-  // Loading state
-  if (
-    isFeaturedLoading ||
-    isNewReleasesLoading ||
-    isTrendingLoading ||
-    isRomanceLoading ||
-    isComedyLoading
-  ) {
-    return <LoadingScreen message="Loading content..." />;
-  }
+  // Handler for series selection
+  const handleSeriesPress = (series: DramaSeries) => {
+    trackEvent(EventType.SERIES_SELECTED, { 
+      seriesId: series.id,
+      seriesTitle: series.title,
+      source: 'home_screen' 
+    });
+    
+    navigation.navigate('SeriesDetails' as never, { 
+      seriesId: series.id,
+      title: series.title 
+    } as never);
+  };
   
-  // Error state
-  if (
-    featuredError ||
-    newReleasesError ||
-    trendingError ||
-    romanceError ||
-    comedyError
-  ) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Error loading content.</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // Handler for continue watching selection
+  const handleContinueWatchingPress = (episode: Episode) => {
+    trackEvent(EventType.RESUME_WATCHING, { 
+      episodeId: episode.id,
+      seriesId: episode.seriesId,
+      episodeTitle: episode.title,
+      source: 'home_screen' 
+    });
+    
+    navigation.navigate('EpisodePlayer' as never, {
+      episodeId: episode.id,
+      seriesId: episode.seriesId,
+      title: episode.title,
+      startPosition: episode.watchProgress || 0
+    } as never);
+  };
   
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.greeting}>
+          {user ? `Hi, ${user.displayName || user.username}` : 'Welcome'}
+        </Text>
+        <TouchableOpacity 
+          style={styles.searchButton} 
+          onPress={handleSearchPress}
+        >
+          <Feather name="search" size={22} color="#333333" />
+        </TouchableOpacity>
+      </View>
+      
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Greeting and App Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>
-              {user ? `Hello, ${user.displayName || user.username}` : 'Welcome'}
-            </Text>
-            <Text style={styles.subtitle}>Discover short drama series</Text>
-          </View>
-          
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('UserProfile')}
-          >
-            {user?.profilePicture ? (
-              <Image
-                source={{ uri: user.profilePicture }}
-                style={styles.profileImage}
-              />
-            ) : (
-              <View style={styles.profileImagePlaceholder}>
-                <Text style={styles.profileInitial}>
-                  {user?.username?.charAt(0).toUpperCase() || 'G'}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+        {/* Featured Carousel */}
+        <View style={styles.carouselContainer}>
+          <DramaCarousel 
+            data={featuredSeries || []}
+            isLoading={isLoadingFeatured}
+            onItemPress={handleSeriesPress}
+          />
         </View>
         
-        {/* Featured Content Banner */}
-        {featuredSeries && featuredSeries.length > 0 && (
-          <TouchableOpacity
-            style={styles.featuredContainer}
-            onPress={() => navigateToSeries(featuredSeries[0].id)}
-          >
-            <Image
-              source={{ uri: featuredSeries[0].coverImage }}
-              style={styles.featuredImage}
-              resizeMode="cover"
-            />
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.8)']}
-              style={styles.featuredGradient}
-            />
-            <View style={styles.featuredContent}>
-              <View style={styles.featuredBadge}>
-                <Text style={styles.featuredBadgeText}>FEATURED</Text>
-              </View>
-              <Text style={styles.featuredTitle}>{featuredSeries[0].title}</Text>
-              <Text style={styles.featuredDescription} numberOfLines={2}>
-                {featuredSeries[0].description}
-              </Text>
-              <TouchableOpacity
-                style={styles.watchButton}
-                onPress={() => navigateToSeries(featuredSeries[0].id)}
-              >
-                <Ionicons name="play" size={16} color={colors.text} />
-                <Text style={styles.watchButtonText}>Watch Now</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        )}
-        
-        {/* Category Sections */}
-        {trendingSeries && trendingSeries.length > 0 && (
-          <View style={styles.sectionContainer}>
+        {/* Continue Watching Section */}
+        {user && (
+          <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Trending Now</Text>
-              <TouchableOpacity>
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              horizontal
-              data={trendingSeries}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <DramaCard series={item} onPress={() => navigateToSeries(item.id)} />
+              <Text style={styles.sectionTitle}>Continue Watching</Text>
+              {continueWatching && continueWatching.length > 0 && (
+                <TouchableOpacity>
+                  <Text style={styles.seeAllText}>See All</Text>
+                </TouchableOpacity>
               )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.carouselContainer}
-            />
+            </View>
+            
+            {isLoadingContinue ? (
+              <DramaRow 
+                type="continue"
+                isLoading={true}
+                data={[]}
+                onItemPress={() => {}}
+              />
+            ) : continueWatching && continueWatching.length > 0 ? (
+              <DramaRow 
+                type="continue"
+                data={continueWatching}
+                onItemPress={handleContinueWatchingPress}
+              />
+            ) : (
+              <EmptyStateView 
+                icon="play-circle-outline"
+                message="You haven't watched any dramas yet"
+                actionText="Explore dramas"
+                onAction={() => navigation.navigate('Explore' as never)}
+              />
+            )}
           </View>
         )}
         
-        {/* Advertisement Banner */}
-        {bannerAds && bannerAds.length > 0 && (
-          <TouchableOpacity
-            style={styles.adContainer}
-            onPress={() => handleAdClick(bannerAds[0])}
-          >
-            <Image
-              source={{ uri: bannerAds[0].imageUrl }}
-              style={styles.adBanner}
-              resizeMode="cover"
-            />
-            <View style={styles.adOverlay}>
-              <Text style={styles.adLabel}>Ad</Text>
-              <Text style={styles.adTitle}>{bannerAds[0].title}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        {/* Trending Series Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Trending Now</Text>
+            {trendingSeries && trendingSeries.length > 0 && (
+              <TouchableOpacity>
+                <Text style={styles.seeAllText}>See All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <DramaRow 
+            type="horizontal"
+            data={trendingSeries || []}
+            isLoading={isLoadingTrending}
+            onItemPress={handleSeriesPress}
+          />
+        </View>
         
         {/* New Releases Section */}
-        {newReleases && newReleases.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>New Releases</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>New Releases</Text>
+            {newReleases && newReleases.length > 0 && (
               <TouchableOpacity>
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
-            </View>
-            <FlatList
-              horizontal
-              data={newReleases}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <DramaCard series={item} onPress={() => navigateToSeries(item.id)} />
-              )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.carouselContainer}
-            />
+            )}
           </View>
-        )}
-        
-        {/* Romance Section */}
-        {romanceSeries && romanceSeries.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Romance</Text>
-              <TouchableOpacity>
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              horizontal
-              data={romanceSeries}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <DramaCard series={item} onPress={() => navigateToSeries(item.id)} />
-              )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.carouselContainer}
-            />
-          </View>
-        )}
-        
-        {/* Comedy Section */}
-        {comedySeries && comedySeries.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Comedy</Text>
-              <TouchableOpacity>
-                <Text style={styles.seeAllText}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              horizontal
-              data={comedySeries}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <DramaCard series={item} onPress={() => navigateToSeries(item.id)} />
-              )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.carouselContainer}
-            />
-          </View>
-        )}
+          
+          <DramaRow 
+            type="horizontal"
+            data={newReleases || []}
+            isLoading={isLoadingNew}
+            onItemPress={handleSeriesPress}
+          />
+        </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: colors.background,
-  },
-  errorText: {
-    color: colors.text,
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 15,
-  },
-  retryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-  },
-  retryButtonText: {
-    color: colors.text,
-    fontWeight: 'bold',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    paddingBottom: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   greeting: {
-    color: colors.text,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#333333',
   },
-  subtitle: {
-    color: colors.textSecondary,
-    fontSize: 14,
+  searchButton: {
+    padding: 8,
   },
-  profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: colors.cardBg,
+  scrollView: {
+    flex: 1,
   },
-  profileImage: {
-    width: '100%',
-    height: '100%',
+  scrollContent: {
+    paddingBottom: 24,
   },
-  profileImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.cardBg,
+  carouselContainer: {
+    marginVertical: 16,
   },
-  profileInitial: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  featuredContainer: {
-    width: width,
-    height: height * 0.3,
-    marginBottom: 20,
-    position: 'relative',
-  },
-  featuredImage: {
-    width: '100%',
-    height: '100%',
-  },
-  featuredGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '70%',
-  },
-  featuredContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 15,
-  },
-  featuredBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginBottom: 10,
-  },
-  featuredBadgeText: {
-    color: colors.text,
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  featuredTitle: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  featuredDescription: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  watchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-    alignSelf: 'flex-start',
-  },
-  watchButtonText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
-  sectionContainer: {
-    marginBottom: 25,
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionTitle: {
-    color: colors.text,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#333333',
   },
   seeAllText: {
-    color: colors.primary,
     fontSize: 14,
-  },
-  carouselContainer: {
-    paddingLeft: 15,
-    paddingRight: 5,
-  },
-  adContainer: {
-    marginHorizontal: 15,
-    height: 120,
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginBottom: 25,
-    position: 'relative',
-  },
-  adBanner: {
-    width: '100%',
-    height: '100%',
-  },
-  adOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  adLabel: {
-    color: colors.text,
-    fontSize: 10,
-    fontWeight: 'bold',
-    opacity: 0.7,
-    marginBottom: 2,
-  },
-  adTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: 'bold',
+    color: '#FF6B6B',
   },
 });
 
