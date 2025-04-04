@@ -11,6 +11,22 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import readline from 'readline';
+
+// Simple prompt function for input
+function prompt(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,12 +69,27 @@ try {
   console.log('Initializing Git repository...');
   execSync(`cd "${TEMP_DIR}" && git init`);
   
+  // Get GitHub username using the GitHub API (reused later)
+  const getGitHubUsername = () => {
+    try {
+      const result = execSync(`curl -s -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/user`, { encoding: 'utf8' });
+      const userData = JSON.parse(result);
+      return userData.login;
+    } catch (error) {
+      console.error('Error fetching GitHub username:', error);
+      return prompt('Enter your GitHub username: ');
+    }
+  };
+  
+  const githubUsername = getGitHubUsername();
+  console.log(`Using GitHub username: ${githubUsername}`);
+
   // Create GitHub repository or use existing one
   console.log('Checking if GitHub repository exists...');
   let repoExists = false;
   
   try {
-    execSync(`curl -s -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/${process.env.USER || 'your-username'}/${REPO_NAME}`, 
+    execSync(`curl -s -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/${githubUsername}/${REPO_NAME}`, 
       { stdio: 'pipe' });
     repoExists = true;
     console.log(`GitHub repository ${REPO_NAME} already exists, will push to existing repository.`);
@@ -438,7 +469,8 @@ module.exports = mergeConfig(getDefaultConfig(__dirname), config);
   
   // Add GitHub remote and push
   console.log('Adding GitHub remote and pushing...');
-  execSync(`cd "${TEMP_DIR}" && git remote add origin https://${GITHUB_TOKEN}@github.com/${process.env.USER || 'your-username'}/${REPO_NAME}.git`, 
+  
+  execSync(`cd "${TEMP_DIR}" && git remote add origin https://${GITHUB_TOKEN}@github.com/${githubUsername}/${REPO_NAME}.git`, 
     { stdio: 'pipe' });
   
   // Force push to main branch (will overwrite existing repository if it exists)
@@ -449,10 +481,10 @@ module.exports = mergeConfig(getDefaultConfig(__dirname), config);
   console.log('===========================================');
   console.log(' 🎉 Export completed successfully! 🎉');
   console.log('===========================================');
-  console.log(`Repository URL: https://github.com/${process.env.USER || 'your-username'}/${REPO_NAME}`);
+  console.log(`Repository URL: https://github.com/${githubUsername}/${REPO_NAME}`);
   console.log('');
   console.log('To clone this repository:');
-  console.log(`git clone https://github.com/${process.env.USER || 'your-username'}/${REPO_NAME}.git`);
+  console.log(`git clone https://github.com/${githubUsername}/${REPO_NAME}.git`);
   console.log('');
   
 } catch (error) {
