@@ -1,367 +1,158 @@
 /**
  * Storage Service
  * 
- * Provides methods for storing and retrieving data from device storage.
- * Uses AsyncStorage as the underlying storage mechanism.
+ * Provides persistent data storage capabilities for the application.
+ * Abstracts AsyncStorage implementation for easier testing and flexibility.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_CONFIG } from '@/constants/config';
 
 /**
  * Storage Service Class
- * 
- * Handles all local storage operations for the application
+ * Handles all persistent storage operations in the app
  */
 class StorageService {
+  private isInitialized = false;
+
   /**
-   * Save a value to storage
-   * 
-   * @param key Storage key
-   * @param value Value to store (will be JSON stringified)
+   * Initialize the storage service
+   * Performs any necessary setup before storage can be used
    */
-  async set<T>(key: string, value: T): Promise<void> {
+  async initialize(): Promise<void> {
     try {
-      const jsonValue = JSON.stringify(value);
-      await AsyncStorage.setItem(key, jsonValue);
+      // Check if storage is accessible by writing and reading a test value
+      await this.setItem('__test__', 'test');
+      const testValue = await this.getItem('__test__');
+      if (testValue !== 'test') {
+        throw new Error('Storage test failed: values do not match');
+      }
+      await this.removeItem('__test__');
+      this.isInitialized = true;
     } catch (error) {
-      console.error(`Error storing data for key ${key}:`, error);
-      throw new Error(`Failed to store data: ${error}`);
+      console.error('Error initializing storage:', error);
+      throw error;
     }
   }
 
   /**
-   * Get a value from storage
-   * 
-   * @param key Storage key
-   * @returns The stored value, or null if not found
+   * Store a key-value pair
+   * @param key The storage key
+   * @param value The value to store (will be JSON stringified if object)
    */
-  async get<T>(key: string): Promise<T | null> {
+  async setItem(key: string, value: any): Promise<void> {
     try {
-      const jsonValue = await AsyncStorage.getItem(key);
-      return jsonValue != null ? JSON.parse(jsonValue) as T : null;
+      const valueToStore = typeof value === 'object' ? JSON.stringify(value) : value;
+      await AsyncStorage.setItem(key, valueToStore);
     } catch (error) {
-      console.error(`Error retrieving data for key ${key}:`, error);
-      throw new Error(`Failed to retrieve data: ${error}`);
+      console.error(`Error setting item [${key}]:`, error);
+      throw error;
     }
   }
 
   /**
-   * Remove a value from storage
-   * 
-   * @param key Storage key
+   * Retrieve a value by key
+   * @param key The storage key
+   * @returns The stored value or null if not found
    */
-  async remove(key: string): Promise<void> {
+  async getItem(key: string): Promise<any> {
+    try {
+      const value = await AsyncStorage.getItem(key);
+      if (value === null) {
+        return null;
+      }
+      
+      // Try to parse as JSON, return as is if not valid JSON
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    } catch (error) {
+      console.error(`Error getting item [${key}]:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a key-value pair
+   * @param key The storage key to remove
+   */
+  async removeItem(key: string): Promise<void> {
     try {
       await AsyncStorage.removeItem(key);
     } catch (error) {
-      console.error(`Error removing data for key ${key}:`, error);
-      throw new Error(`Failed to remove data: ${error}`);
+      console.error(`Error removing item [${key}]:`, error);
+      throw error;
     }
   }
 
   /**
-   * Clear all app storage
+   * Clear all stored data
+   * Use with caution - this will wipe all app data
    */
-  async clear(): Promise<void> {
+  async clearAll(): Promise<void> {
     try {
       await AsyncStorage.clear();
     } catch (error) {
       console.error('Error clearing storage:', error);
-      throw new Error(`Failed to clear storage: ${error}`);
+      throw error;
     }
   }
 
   /**
-   * Get all storage keys
-   * 
-   * @returns Array of storage keys
+   * Get all keys stored in storage
+   * @returns Array of all storage keys
    */
   async getAllKeys(): Promise<string[]> {
     try {
       return await AsyncStorage.getAllKeys();
     } catch (error) {
       console.error('Error getting all keys:', error);
-      throw new Error(`Failed to get storage keys: ${error}`);
+      throw error;
     }
   }
 
-  // Auth specific methods
-
   /**
-   * Set authentication token
-   * 
-   * @param token JWT token
+   * Store multiple key-value pairs at once
+   * @param pairs Array of [key, value] pairs to store
    */
-  async setAuthToken(token: string): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.AUTH_TOKEN, token);
-  }
-
-  /**
-   * Get authentication token
-   * 
-   * @returns JWT token or null
-   */
-  async getAuthToken(): Promise<string | null> {
-    return await this.get<string>(APP_CONFIG.STORAGE_KEYS.AUTH_TOKEN);
-  }
-
-  /**
-   * Set refresh token
-   * 
-   * @param token Refresh token
-   */
-  async setRefreshToken(token: string): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.REFRESH_TOKEN, token);
-  }
-
-  /**
-   * Get refresh token
-   * 
-   * @returns Refresh token or null
-   */
-  async getRefreshToken(): Promise<string | null> {
-    return await this.get<string>(APP_CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
-  }
-
-  /**
-   * Store user data
-   * 
-   * @param user User object
-   */
-  async setUser<T>(user: T): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.USER, user);
-  }
-
-  /**
-   * Get user data
-   * 
-   * @returns User object or null
-   */
-  async getUser<T>(): Promise<T | null> {
-    return await this.get<T>(APP_CONFIG.STORAGE_KEYS.USER);
-  }
-
-  /**
-   * Clear all authentication data
-   */
-  async clearAuthData(): Promise<void> {
-    await this.remove(APP_CONFIG.STORAGE_KEYS.AUTH_TOKEN);
-    await this.remove(APP_CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
-    await this.remove(APP_CONFIG.STORAGE_KEYS.USER);
-  }
-
-  // Settings methods
-
-  /**
-   * Save app settings
-   * 
-   * @param settings Settings object
-   */
-  async saveSettings<T>(settings: T): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.SETTINGS, settings);
-  }
-
-  /**
-   * Get app settings
-   * 
-   * @returns Settings object or null
-   */
-  async getSettings<T>(): Promise<T | null> {
-    return await this.get<T>(APP_CONFIG.STORAGE_KEYS.SETTINGS);
-  }
-
-  /**
-   * Update specific settings
-   * 
-   * @param updates Partial settings to update
-   */
-  async updateSettings<T>(updates: Partial<T>): Promise<T | null> {
-    const current = await this.getSettings<T>();
-    if (current) {
-      const updated = { ...current, ...updates };
-      await this.saveSettings(updated);
-      return updated;
+  async multiSet(pairs: [string, any][]): Promise<void> {
+    try {
+      const processedPairs = pairs.map(([key, value]) => {
+        const processedValue = typeof value === 'object' ? JSON.stringify(value) : value;
+        return [key, processedValue];
+      });
+      await AsyncStorage.multiSet(processedPairs as [string, string][]);
+    } catch (error) {
+      console.error('Error setting multiple items:', error);
+      throw error;
     }
-    await this.saveSettings(updates as T);
-    return updates as T;
-  }
-
-  // Watch history methods
-
-  /**
-   * Save watch history
-   * 
-   * @param watchHistory Array of watched items
-   */
-  async saveWatchHistory<T>(watchHistory: T[]): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.WATCH_HISTORY, watchHistory);
   }
 
   /**
-   * Get watch history
-   * 
-   * @returns Array of watched items or empty array
+   * Get multiple values by their keys
+   * @param keys Array of keys to retrieve
+   * @returns Array of values in the same order as the keys
    */
-  async getWatchHistory<T>(): Promise<T[]> {
-    const history = await this.get<T[]>(APP_CONFIG.STORAGE_KEYS.WATCH_HISTORY);
-    return history || [];
-  }
-
-  /**
-   * Add item to watch history
-   * 
-   * @param item Item to add to history
-   * @param maxItems Maximum number of items to keep in history
-   */
-  async addToWatchHistory<T extends { id: string | number }>(
-    item: T,
-    maxItems: number = APP_CONFIG.CONTENT.MAX_RECENT_SERIES
-  ): Promise<T[]> {
-    let history = await this.getWatchHistory<T>();
-    
-    // Remove item if it already exists (to move it to the top)
-    history = history.filter(i => i.id !== item.id);
-    
-    // Add item to the beginning
-    history.unshift(item);
-    
-    // Trim to max items
-    if (history.length > maxItems) {
-      history = history.slice(0, maxItems);
+  async multiGet(keys: string[]): Promise<any[]> {
+    try {
+      const results = await AsyncStorage.multiGet(keys);
+      return results.map(([_, value]) => {
+        if (value === null) {
+          return null;
+        }
+        
+        try {
+          return JSON.parse(value);
+        } catch {
+          return value;
+        }
+      });
+    } catch (error) {
+      console.error('Error getting multiple items:', error);
+      throw error;
     }
-    
-    await this.saveWatchHistory(history);
-    return history;
-  }
-
-  /**
-   * Clear watch history
-   */
-  async clearWatchHistory(): Promise<void> {
-    await this.remove(APP_CONFIG.STORAGE_KEYS.WATCH_HISTORY);
-  }
-
-  // Download management methods
-
-  /**
-   * Save downloaded content info
-   * 
-   * @param downloads Array of download info objects
-   */
-  async saveDownloads<T>(downloads: T[]): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.DOWNLOADS, downloads);
-  }
-
-  /**
-   * Get downloaded content info
-   * 
-   * @returns Array of download info objects or empty array
-   */
-  async getDownloads<T>(): Promise<T[]> {
-    const downloads = await this.get<T[]>(APP_CONFIG.STORAGE_KEYS.DOWNLOADS);
-    return downloads || [];
-  }
-
-  /**
-   * Add download info
-   * 
-   * @param downloadInfo Info about the downloaded content
-   */
-  async addDownload<T extends { id: string | number }>(downloadInfo: T): Promise<T[]> {
-    const downloads = await this.getDownloads<T>();
-    
-    // Check if already exists
-    const existingIndex = downloads.findIndex(d => d.id === downloadInfo.id);
-    
-    if (existingIndex >= 0) {
-      // Update existing
-      downloads[existingIndex] = downloadInfo;
-    } else {
-      // Add new
-      downloads.push(downloadInfo);
-    }
-    
-    await this.saveDownloads(downloads);
-    return downloads;
-  }
-
-  /**
-   * Remove download info
-   * 
-   * @param id ID of the download to remove
-   */
-  async removeDownload<T extends { id: string | number }>(id: string | number): Promise<T[]> {
-    let downloads = await this.getDownloads<T>();
-    downloads = downloads.filter(d => d.id !== id);
-    await this.saveDownloads(downloads);
-    return downloads;
-  }
-
-  /**
-   * Clear all downloads info
-   */
-  async clearDownloads(): Promise<void> {
-    await this.remove(APP_CONFIG.STORAGE_KEYS.DOWNLOADS);
-  }
-
-  // Search history methods
-
-  /**
-   * Save search history
-   * 
-   * @param searches Array of search terms
-   */
-  async saveSearchHistory(searches: string[]): Promise<void> {
-    await this.set(APP_CONFIG.STORAGE_KEYS.SEARCH_HISTORY, searches);
-  }
-
-  /**
-   * Get search history
-   * 
-   * @returns Array of search terms or empty array
-   */
-  async getSearchHistory(): Promise<string[]> {
-    const searches = await this.get<string[]>(APP_CONFIG.STORAGE_KEYS.SEARCH_HISTORY);
-    return searches || [];
-  }
-
-  /**
-   * Add search term to history
-   * 
-   * @param term Search term to add
-   * @param maxItems Maximum number of items to keep
-   */
-  async addSearchTerm(
-    term: string,
-    maxItems: number = APP_CONFIG.CONTENT.MAX_SEARCH_HISTORY
-  ): Promise<string[]> {
-    let searches = await this.getSearchHistory();
-    
-    // Clean the term
-    const cleanTerm = term.trim();
-    if (!cleanTerm) return searches;
-    
-    // Remove term if it already exists (to move it to the top)
-    searches = searches.filter(t => t.toLowerCase() !== cleanTerm.toLowerCase());
-    
-    // Add term to the beginning
-    searches.unshift(cleanTerm);
-    
-    // Trim to max items
-    if (searches.length > maxItems) {
-      searches = searches.slice(0, maxItems);
-    }
-    
-    await this.saveSearchHistory(searches);
-    return searches;
-  }
-
-  /**
-   * Clear search history
-   */
-  async clearSearchHistory(): Promise<void> {
-    await this.remove(APP_CONFIG.STORAGE_KEYS.SEARCH_HISTORY);
   }
 }
 
+// Create and export a singleton instance
 export const storageService = new StorageService();

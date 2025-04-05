@@ -1,417 +1,187 @@
 /**
  * Analytics Service
  * 
- * Provides methods for tracking user behavior and app usage.
- * Supports real-time analytics and offline tracking.
+ * Handles tracking and analytics functionality for the application.
+ * Provides a unified interface for tracking events, sessions, and user behavior.
  */
-import { apiService } from './api';
-import { storageService } from './storage';
-import { API_CONFIG } from '@/constants/config';
 
-// Types of analytics events
+/**
+ * Analytics Event Types Enum
+ * Standardized event types for consistent tracking
+ */
 export enum AnalyticsEventType {
-  // Content viewing events
-  VIEW_SERIES = 'view_series',
-  VIEW_EPISODE = 'view_episode',
-  COMPLETE_EPISODE = 'complete_episode',
+  // App lifecycle events
+  APP_OPEN = 'app_open',
+  APP_CLOSE = 'app_close',
+  SCREEN_VIEW = 'screen_view',
   
-  // User interaction events
+  // User events
+  USER_REGISTER = 'user_register',
+  USER_LOGIN = 'user_login',
+  USER_LOGOUT = 'user_logout',
+  
+  // Content events
+  CONTENT_VIEW = 'content_view',
+  EPISODE_START = 'episode_start',
+  EPISODE_COMPLETE = 'episode_complete',
+  EPISODE_PROGRESS = 'episode_progress',
+  SERIES_DETAILS_VIEW = 'series_details_view',
+  
+  // Engagement events
   ADD_TO_WATCHLIST = 'add_to_watchlist',
   REMOVE_FROM_WATCHLIST = 'remove_from_watchlist',
-  RATE_SERIES = 'rate_series',
+  RATE_CONTENT = 'rate_content',
   SHARE_CONTENT = 'share_content',
   
+  // Monetization events
+  PURCHASE_INITIATED = 'purchase_initiated',
+  PURCHASE_COMPLETED = 'purchase_completed',
+  PURCHASE_CANCELLED = 'purchase_cancelled',
+  SUBSCRIPTION_STARTED = 'subscription_started',
+  SUBSCRIPTION_RENEWED = 'subscription_renewed',
+  SUBSCRIPTION_CANCELLED = 'subscription_cancelled',
+  COIN_PURCHASE = 'coin_purchase',
+  COIN_SPEND = 'coin_spend',
+  
+  // Ad events
+  AD_IMPRESSION = 'ad_impression',
+  AD_CLICK = 'ad_click',
+  AD_REWARD_EARNED = 'ad_reward_earned',
+  
   // Search events
-  SEARCH = 'search',
-  FILTER = 'filter',
+  SEARCH_QUERY = 'search_query',
+  SEARCH_RESULTS_VIEW = 'search_results_view',
   
-  // Purchase events
-  VIEW_SUBSCRIPTION = 'view_subscription',
-  PURCHASE_SUBSCRIPTION = 'purchase_subscription',
-  PURCHASE_COINS = 'purchase_coins',
-  SPEND_COINS = 'spend_coins',
-  
-  // App usage events
-  APP_OPEN = 'app_open',
-  APP_BACKGROUND = 'app_background',
-  SCREEN_VIEW = 'screen_view',
+  // Error events
   ERROR = 'error',
   
-  // Performance events
-  LOAD_TIME = 'load_time',
-  BUFFER_TIME = 'buffer_time',
-  
-  // Custom event
-  CUSTOM = 'custom'
-}
-
-// Interface for analytics events
-export interface AnalyticsEvent {
-  eventType: AnalyticsEventType;
-  timestamp: number;
-  properties: Record<string, any>;
-  userId?: number | string; // Optional as user may not be logged in
-}
-
-// Cached events for offline tracking
-interface CachedEvents {
-  events: AnalyticsEvent[];
-  lastSyncTime: number;
+  // Custom event (for one-off events)
+  CUSTOM = 'custom_event'
 }
 
 /**
  * Analytics Service Class
- * 
- * Handles tracking and reporting of user behavior and app usage
  */
 class AnalyticsService {
-  private initialized: boolean = false;
-  private userId: string | number | null = null;
-  private queuedEvents: AnalyticsEvent[] = [];
-  private isSyncing: boolean = false;
-  private syncInterval: any = null; // For automatic syncing
-  
-  constructor() {
-    this.initialize();
-  }
-  
+  private isInitialized = false;
+  private userId: string | null = null;
+  private anonymousId: string | null = null;
+  private sessionStartTime: number = 0;
+  private currentScreen: string | null = null;
+
   /**
    * Initialize the analytics service
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return;
-    
     try {
-      // Get user ID if logged in
-      const user = await storageService.getUser();
-      if (user && user.id) {
-        this.userId = user.id;
-      }
-      
-      // Load cached events
-      const cached = await this.loadCachedEvents();
-      if (cached && cached.events.length > 0) {
-        this.queuedEvents = [...cached.events];
-        // Try to sync immediately if there are cached events
-        this.syncEvents();
-      }
-      
-      // Set up automatic syncing
-      this.setupAutoSync();
-      
-      this.initialized = true;
-      
-      // Track app open event
-      this.trackEvent(AnalyticsEventType.APP_OPEN);
+      // In a real implementation, we would initialize 
+      // analytics SDKs like Firebase Analytics, Amplitude, etc.
+      console.log('Analytics service initialized');
+      this.sessionStartTime = Date.now();
+      this.isInitialized = true;
     } catch (error) {
-      console.error('Failed to initialize analytics:', error);
+      console.error('Error initializing analytics:', error);
+      // Continue without analytics rather than breaking the app
     }
   }
-  
+
   /**
-   * Set up automatic syncing of analytics events
+   * Set the user ID for the analytics session
+   * @param userId The user's ID (or null for anonymous)
    */
-  private setupAutoSync(intervalMs: number = 60000): void {
-    // Clear any existing interval
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
-    
-    // Set up new interval for syncing
-    this.syncInterval = setInterval(() => {
-      if (this.queuedEvents.length > 0) {
-        this.syncEvents();
-      }
-    }, intervalMs);
+  setUserId(userId: string | null): void {
+    this.userId = userId;
+    // In a real implementation, we would set user ID in analytics SDKs
+    console.log(`Analytics user ID set: ${userId || 'anonymous'}`);
   }
-  
+
+  /**
+   * Set the anonymous ID for tracking unregistered users
+   * @param anonymousId The anonymous ID for the user
+   */
+  setAnonymousId(anonymousId: string): void {
+    this.anonymousId = anonymousId;
+    // In a real implementation, we would set anonymous ID in analytics SDKs
+    console.log(`Analytics anonymous ID set: ${anonymousId}`);
+  }
+
+  /**
+   * Track a screen view
+   * @param screenName The name of the screen
+   * @param params Additional screen parameters
+   */
+  trackScreen(screenName: string, params: Record<string, any> = {}): void {
+    if (!this.isInitialized) {
+      console.warn('Analytics not initialized when trying to track screen');
+      return;
+    }
+
+    this.currentScreen = screenName;
+    this.trackEvent(AnalyticsEventType.SCREEN_VIEW, {
+      screen_name: screenName,
+      ...params
+    });
+  }
+
   /**
    * Track an analytics event
-   * 
-   * @param eventType Type of event to track
-   * @param properties Additional properties for the event
+   * @param eventType The type of event
+   * @param params Event parameters
    */
-  async trackEvent(
-    eventType: AnalyticsEventType,
-    properties: Record<string, any> = {}
-  ): Promise<void> {
-    try {
-      // Create event object
-      const event: AnalyticsEvent = {
-        eventType,
-        timestamp: Date.now(),
-        properties,
-        userId: this.userId || undefined
-      };
-      
-      // Add to queue
-      this.queuedEvents.push(event);
-      
-      // Save to cache
-      await this.saveEventsToCache();
-      
-      // If we have enough events or it's a high-priority event, sync immediately
-      if (this.queuedEvents.length >= 10 || this.isHighPriorityEvent(eventType)) {
-        this.syncEvents();
-      }
-    } catch (error) {
-      console.error(`Failed to track event ${eventType}:`, error);
+  trackEvent(eventType: AnalyticsEventType, params: Record<string, any> = {}): void {
+    if (!this.isInitialized) {
+      console.warn(`Analytics not initialized when trying to track event: ${eventType}`);
+      return;
     }
+
+    // Create the event payload
+    const eventPayload = {
+      event_type: eventType,
+      timestamp: new Date().toISOString(),
+      session_id: this.sessionStartTime.toString(),
+      user_id: this.userId,
+      anonymous_id: this.anonymousId,
+      current_screen: this.currentScreen,
+      ...params
+    };
+
+    // In a real implementation, we would send to analytics service
+    console.log('Track event:', eventPayload);
+
+    // For a real implementation, add code here to:
+    // 1. Send event to analytics backend
+    // 2. Queue events if offline and send later
+    // 3. Handle batching for performance
   }
-  
+
   /**
-   * Determine if an event is high priority and should be synced immediately
+   * Track an error event
+   * @param errorCode Error code or type
+   * @param errorMessage Human-readable error message
+   * @param additionalParams Any additional context for the error
    */
-  private isHighPriorityEvent(eventType: AnalyticsEventType): boolean {
-    // Events that should be synced immediately
-    const highPriorityEvents = [
-      AnalyticsEventType.PURCHASE_SUBSCRIPTION,
-      AnalyticsEventType.PURCHASE_COINS,
-      AnalyticsEventType.SPEND_COINS,
-      AnalyticsEventType.ERROR,
-      AnalyticsEventType.COMPLETE_EPISODE
-    ];
-    
-    return highPriorityEvents.includes(eventType);
-  }
-  
-  /**
-   * Save events to cache for offline tracking
-   */
-  private async saveEventsToCache(): Promise<void> {
-    try {
-      const cachedData: CachedEvents = {
-        events: this.queuedEvents,
-        lastSyncTime: Date.now()
-      };
-      
-      await storageService.set('analytics_cache', cachedData);
-    } catch (error) {
-      console.error('Failed to save events to cache:', error);
-    }
-  }
-  
-  /**
-   * Load cached events from storage
-   */
-  private async loadCachedEvents(): Promise<CachedEvents | null> {
-    try {
-      return await storageService.get<CachedEvents>('analytics_cache');
-    } catch (error) {
-      console.error('Failed to load cached events:', error);
-      return null;
-    }
-  }
-  
-  /**
-   * Sync events with the analytics server
-   */
-  async syncEvents(): Promise<void> {
-    // Prevent multiple syncs at once
-    if (this.isSyncing || this.queuedEvents.length === 0) return;
-    
-    this.isSyncing = true;
-    
-    try {
-      // Copy current events
-      const eventsToSync = [...this.queuedEvents];
-      
-      // Send to server
-      await apiService.post(API_CONFIG.ENDPOINTS.ANALYTICS.USER, {
-        events: eventsToSync
-      });
-      
-      // Remove synced events from queue
-      this.queuedEvents = this.queuedEvents.filter(
-        event => !eventsToSync.includes(event)
-      );
-      
-      // Update cache
-      await this.saveEventsToCache();
-      
-      console.log(`Synced ${eventsToSync.length} analytics events`);
-    } catch (error) {
-      console.error('Failed to sync analytics events:', error);
-      // Keep events in queue for retry
-    } finally {
-      this.isSyncing = false;
-    }
-  }
-  
-  /**
-   * Update user ID when user logs in or out
-   */
-  updateUserId(userId: string | number | null): void {
-    this.userId = userId;
-    
-    // Track login/logout event when ID changes
-    if (userId) {
-      this.trackEvent(AnalyticsEventType.CUSTOM, {
-        name: 'user_login',
-        userId
-      });
-    } else {
-      this.trackEvent(AnalyticsEventType.CUSTOM, {
-        name: 'user_logout'
-      });
-    }
-  }
-  
-  /**
-   * Track screen view
-   */
-  trackScreenView(screenName: string, properties: Record<string, any> = {}): void {
-    this.trackEvent(AnalyticsEventType.SCREEN_VIEW, {
-      screenName,
-      ...properties
-    });
-  }
-  
-  /**
-   * Track content viewing
-   */
-  trackContentView(
-    contentType: 'series' | 'episode',
-    contentId: string | number,
-    contentName: string,
-    properties: Record<string, any> = {}
-  ): void {
-    const eventType = contentType === 'series' 
-      ? AnalyticsEventType.VIEW_SERIES 
-      : AnalyticsEventType.VIEW_EPISODE;
-    
-    this.trackEvent(eventType, {
-      contentId,
-      contentName,
-      ...properties
-    });
-  }
-  
-  /**
-   * Track content completion (episode watched)
-   */
-  trackContentComplete(
-    episodeId: string | number,
-    episodeName: string,
-    seriesId: string | number,
-    progress: number,
-    properties: Record<string, any> = {}
-  ): void {
-    this.trackEvent(AnalyticsEventType.COMPLETE_EPISODE, {
-      episodeId,
-      episodeName,
-      seriesId,
-      progress,
-      ...properties
-    });
-  }
-  
-  /**
-   * Track search action
-   */
-  trackSearch(
-    searchTerm: string,
-    resultsCount: number,
-    properties: Record<string, any> = {}
-  ): void {
-    this.trackEvent(AnalyticsEventType.SEARCH, {
-      searchTerm,
-      resultsCount,
-      ...properties
-    });
-  }
-  
-  /**
-   * Track error
-   */
-  trackError(
-    errorMessage: string,
-    errorCode?: string | number,
-    properties: Record<string, any> = {}
-  ): void {
+  trackError(errorCode: string, errorMessage: string, additionalParams: Record<string, any> = {}): void {
     this.trackEvent(AnalyticsEventType.ERROR, {
-      errorMessage,
-      errorCode,
-      ...properties
+      error_code: errorCode,
+      error_message: errorMessage,
+      ...additionalParams
     });
   }
-  
+
   /**
-   * Get user analytics data
-   * Returns viewing habits, preferences, and trends for the current user
+   * End the current analytics session
    */
-  async getUserAnalytics(): Promise<any> {
-    try {
-      return await apiService.get(API_CONFIG.ENDPOINTS.ANALYTICS.USER);
-    } catch (error) {
-      console.error('Failed to get user analytics:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Get content analytics data
-   * Returns performance metrics for a specific piece of content
-   */
-  async getContentAnalytics(contentId: string | number, contentType: 'series' | 'episode'): Promise<any> {
-    try {
-      return await apiService.get(`${API_CONFIG.ENDPOINTS.ANALYTICS.CONTENT}`, {
-        contentId,
-        contentType
-      });
-    } catch (error) {
-      console.error('Failed to get content analytics:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Get admin analytics dashboard data
-   * Returns comprehensive analytics for administrators
-   */
-  async getAdminAnalytics(): Promise<any> {
-    try {
-      return await apiService.get(API_CONFIG.ENDPOINTS.ANALYTICS.ADMIN);
-    } catch (error) {
-      console.error('Failed to get admin analytics:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Get trending content analytics
-   * Returns trending series and episodes based on views, ratings, etc.
-   */
-  async getTrends(
-    timeframe: 'day' | 'week' | 'month' = 'week',
-    limit: number = 10
-  ): Promise<any> {
-    try {
-      return await apiService.get(API_CONFIG.ENDPOINTS.ANALYTICS.TRENDS, {
-        timeframe,
-        limit
-      });
-    } catch (error) {
-      console.error('Failed to get trends:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Clean up resources when app is closing
-   */
-  async cleanUp(): Promise<void> {
-    // Track app background event
-    await this.trackEvent(AnalyticsEventType.APP_BACKGROUND);
-    
-    // Sync any remaining events
-    await this.syncEvents();
-    
-    // Clear sync interval
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
+  endSession(): void {
+    if (!this.isInitialized) return;
+
+    const sessionDuration = Date.now() - this.sessionStartTime;
+    this.trackEvent(AnalyticsEventType.APP_CLOSE, {
+      session_duration_ms: sessionDuration
+    });
+
+    // In a real implementation, we would flush any queued events
   }
 }
 
+// Create and export a singleton instance
 export const analyticsService = new AnalyticsService();
