@@ -3,6 +3,8 @@
  * 
  * Manages in-app advertisements, including displaying ads,
  * tracking ad views, and rewarding users for watching ads.
+ * 
+ * Integrates with AdMob and AppLovin through the ad mediation service.
  */
 import { apiService } from './api';
 import { coinService } from './coin';
@@ -10,6 +12,9 @@ import { analyticsService } from './analytics';
 import { API_CONFIG } from '@/constants/config';
 import { Advertisement, AdViewingRecord } from '@/types/monetization';
 import { AnalyticsEventType } from './analytics';
+import { adMediationService, AdProviderType } from './adProviders/adMediationService';
+import { AdEventCallback } from '@/types/advertising';
+import { __DEV__ } from './constants';
 
 /**
  * Ad Status Enum
@@ -46,38 +51,83 @@ export type AdEventListener = (status: AdStatus, data?: any) => void;
  * Advertising Service Class
  * 
  * Handles operations related to displaying and tracking advertisements
+ * using the ad mediation service to manage multiple ad providers
  */
 class AdvertisingService {
-  private adProviders: any = {}; // Will hold references to ad provider SDKs
-  private adUnits: Record<string, string> = {}; // Ad unit IDs for different ad types
   private listeners: Record<string, AdEventListener[]> = {};
   private lastAdTime: Record<string, number> = {}; // Track when ads were last shown
-  private isAdLoading: Record<string, boolean> = {}; // Track ad loading state
+  private initialized: boolean = false;
   
   /**
    * Initialize the advertising service
    * 
-   * @param adUnitIds Object containing ad unit IDs for different types
+   * @param config Configuration object with settings for each ad network
    * @returns Promise that resolves when initialization is complete
    */
-  async initialize(adUnitIds: Record<string, string>): Promise<void> {
+  async initialize(config: {
+    admob?: { appId?: string, adUnitIds?: Record<string, string> },
+    applovin?: { sdkKey?: string, adUnitIds?: Record<string, string> }
+  }): Promise<void> {
     try {
-      this.adUnits = adUnitIds;
+      // Skip if already initialized
+      if (this.initialized) {
+        return;
+      }
       
-      // This would normally initialize the actual ad SDKs
-      // In a real implementation, this would use something like
-      // AdMob, Facebook Ads, or other mobile ad providers
-      
-      // For example: AdMob.initialize()
-      
-      // Track ad types
-      Object.keys(AdType).forEach(type => {
+      // Set up listener tracking
+      Object.values(AdType).forEach(type => {
         this.lastAdTime[type] = 0;
-        this.isAdLoading[type] = false;
         this.listeners[type] = [];
       });
       
-      console.log('Advertising service initialized');
+      // Set up mediation config
+      const mediationConfig = {
+        admob: {
+          appId: config.admob?.appId,
+          adUnitIds: config.admob?.adUnitIds || {},
+          testMode: __DEV__
+        },
+        applovin: {
+          appId: config.applovin?.sdkKey,
+          adUnitIds: config.applovin?.adUnitIds || {},
+          testMode: __DEV__
+        }
+      };
+      
+      // Initialize ad mediation service
+      await adMediationService.initialize(mediationConfig);
+      
+      // Add callbacks from mediation service to our listeners
+      Object.values(AdType).forEach(type => {
+        adMediationService.addCallback(type, (status, data) => {
+          this.notifyListeners(type, status, data);
+          
+          // If the ad was completed, handle rewarded ad completion
+          if (status === AdStatus.COMPLETED && type === AdType.REWARDED && data?.reward) {
+            this.handleRewardedAdCompletion(data.contentId, data.contentType)
+              .catch(error => console.error('Error handling reward:', error));
+          }
+          
+          // Track ad view on completion or failure
+          if (status === AdStatus.COMPLETED || status === AdStatus.FAILED) {
+            this.trackAdView(
+              type, 
+              status === AdStatus.COMPLETED,
+              data?.contentId,
+              data?.contentType
+            ).catch(error => console.error('Error tracking ad view:', error));
+          }
+        });
+      });
+      
+      // Pre-load interstitial and rewarded ads
+      await Promise.all([
+        adMediationService.loadAd(AdType.INTERSTITIAL),
+        adMediationService.loadAd(AdType.REWARDED)
+      ]);
+      
+      this.initialized = true;
+      console.log('Advertising service initialized with AdMob and AppLovin');
     } catch (error) {
       console.error('Error initializing advertising service:', error);
       throw error;
@@ -136,26 +186,16 @@ class AdvertisingService {
    */
   async loadAd(adType: AdType): Promise<boolean> {
     try {
-      if (this.isAdLoading[adType]) {
-        return false; // Already loading
+      if (!this.initialized) {
+        console.error('Ad service not initialized');
+        this.notifyListeners(adType, AdStatus.FAILED, { error: 'Not initialized' });
+        return false;
       }
       
-      this.isAdLoading[adType] = true;
-      this.notifyListeners(adType, AdStatus.LOADING);
-      
-      // This would be replaced with actual ad SDK calls
-      // For example: await AdMob.loadInterstitial()
-      
-      // Simulate ad loading with a delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      this.isAdLoading[adType] = false;
-      this.notifyListeners(adType, AdStatus.READY);
-      
-      return true;
+      // Forward to mediation service
+      return await adMediationService.loadAd(adType);
     } catch (error) {
       console.error(`Error loading ${adType} ad:`, error);
-      this.isAdLoading[adType] = false;
       this.notifyListeners(adType, AdStatus.FAILED, { error });
       return false;
     }
@@ -170,6 +210,11 @@ class AdvertisingService {
    */
   async showAd(adType: AdType, options: any = {}): Promise<boolean> {
     try {
+      if (!this.initialized) {
+        console.error('Ad service not initialized');
+        return false;
+      }
+      
       // Check minimum time between ads
       const now = Date.now();
       const minInterval = options.minInterval || 30000; // Default 30 seconds
@@ -179,35 +224,15 @@ class AdvertisingService {
         return false;
       }
       
-      // Load ad if not ready
-      if (!this.isAdReady(adType)) {
-        const loaded = await this.loadAd(adType);
-        if (!loaded) {
-          return false;
-        }
-      }
+      // Update last ad time
+      this.lastAdTime[adType] = now;
       
-      this.notifyListeners(adType, AdStatus.SHOWING);
-      
-      // This would be replaced with actual ad SDK calls
-      // For example: await AdMob.showInterstitial()
-      
-      // Simulate showing ad
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      this.lastAdTime[adType] = Date.now();
-      
-      // For rewarded ads, handle reward
-      if (adType === AdType.REWARDED) {
-        await this.handleRewardedAdCompletion(options.contentId, options.contentType);
-      }
-      
-      // Track ad view
-      await this.trackAdView(adType, true, options.contentId, options.contentType);
-      
-      this.notifyListeners(adType, AdStatus.COMPLETED);
-      
-      return true;
+      // Forward to mediation service with content info
+      return await adMediationService.showAd(adType, {
+        ...options,
+        contentId: options.contentId,
+        contentType: options.contentType
+      });
     } catch (error) {
       console.error(`Error showing ${adType} ad:`, error);
       this.notifyListeners(adType, AdStatus.FAILED, { error });
@@ -222,11 +247,11 @@ class AdvertisingService {
    * @returns Boolean indicating if ad is ready
    */
   isAdReady(adType: AdType): boolean {
-    // This would check with the actual ad SDK
-    // For example: return AdMob.isInterstitialReady()
+    if (!this.initialized) {
+      return false;
+    }
     
-    // Simple implementation for now
-    return !this.isAdLoading[adType];
+    return adMediationService.isAdReady(adType);
   }
   
   /**
