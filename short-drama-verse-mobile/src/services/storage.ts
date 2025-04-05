@@ -1,158 +1,346 @@
 /**
  * Storage Service
  * 
- * Provides persistent data storage capabilities for the application.
- * Abstracts AsyncStorage implementation for easier testing and flexibility.
+ * Provides persistent local storage with encryption support.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
+import EncryptedStorage from 'react-native-encrypted-storage';
 
-/**
- * Storage Service Class
- * Handles all persistent storage operations in the app
- */
+// Storage instance for fast access
+const storage = new MMKV();
+
+// Storage keys
+const STORAGE_PREFIX = 'sdv_'; // ShortDramaVerse prefix
+const SECURE_STORAGE_PREFIX = 'sdv_secure_';
+
 class StorageService {
-  private isInitialized = false;
-
   /**
-   * Initialize the storage service
-   * Performs any necessary setup before storage can be used
+   * Store a string value
    */
-  async initialize(): Promise<void> {
+  async setItem(key: string, value: string): Promise<void> {
     try {
-      // Check if storage is accessible by writing and reading a test value
-      await this.setItem('__test__', 'test');
-      const testValue = await this.getItem('__test__');
-      if (testValue !== 'test') {
-        throw new Error('Storage test failed: values do not match');
-      }
-      await this.removeItem('__test__');
-      this.isInitialized = true;
+      const prefixedKey = this.prefixKey(key);
+      // Store in both MMKV (fast) and AsyncStorage (reliable)
+      storage.set(prefixedKey, value);
+      await AsyncStorage.setItem(prefixedKey, value);
     } catch (error) {
-      console.error('Error initializing storage:', error);
+      console.error(`Error storing ${key}:`, error);
       throw error;
     }
   }
-
+  
   /**
-   * Store a key-value pair
-   * @param key The storage key
-   * @param value The value to store (will be JSON stringified if object)
+   * Retrieve a string value
    */
-  async setItem(key: string, value: any): Promise<void> {
+  async getItem(key: string): Promise<string | null> {
     try {
-      const valueToStore = typeof value === 'object' ? JSON.stringify(value) : value;
-      await AsyncStorage.setItem(key, valueToStore);
-    } catch (error) {
-      console.error(`Error setting item [${key}]:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Retrieve a value by key
-   * @param key The storage key
-   * @returns The stored value or null if not found
-   */
-  async getItem(key: string): Promise<any> {
-    try {
-      const value = await AsyncStorage.getItem(key);
-      if (value === null) {
-        return null;
+      const prefixedKey = this.prefixKey(key);
+      // Try MMKV first (faster)
+      let value = storage.getString(prefixedKey);
+      
+      // Fall back to AsyncStorage if not in MMKV
+      if (value === undefined) {
+        value = await AsyncStorage.getItem(prefixedKey);
+        
+        // If found in AsyncStorage but not MMKV, update MMKV for next time
+        if (value !== null) {
+          storage.set(prefixedKey, value);
+        }
       }
       
-      // Try to parse as JSON, return as is if not valid JSON
-      try {
-        return JSON.parse(value);
-      } catch {
-        return value;
-      }
+      return value || null;
     } catch (error) {
-      console.error(`Error getting item [${key}]:`, error);
+      console.error(`Error retrieving ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Store a numeric value
+   */
+  async setNumber(key: string, value: number): Promise<void> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Store in both MMKV and AsyncStorage
+      storage.set(prefixedKey, value);
+      await AsyncStorage.setItem(prefixedKey, value.toString());
+    } catch (error) {
+      console.error(`Error storing number ${key}:`, error);
       throw error;
     }
   }
-
+  
   /**
-   * Remove a key-value pair
-   * @param key The storage key to remove
+   * Retrieve a numeric value
+   */
+  async getNumber(key: string): Promise<number | null> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Try MMKV first
+      const mmkvValue = storage.getNumber(prefixedKey);
+      
+      if (mmkvValue !== undefined) {
+        return mmkvValue;
+      }
+      
+      // Fall back to AsyncStorage
+      const value = await AsyncStorage.getItem(prefixedKey);
+      if (value !== null) {
+        const numValue = parseFloat(value);
+        // Update MMKV for next time
+        storage.set(prefixedKey, numValue);
+        return numValue;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Error retrieving number ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Store a boolean value
+   */
+  async setBoolean(key: string, value: boolean): Promise<void> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Store in both MMKV and AsyncStorage
+      storage.set(prefixedKey, value);
+      await AsyncStorage.setItem(prefixedKey, value ? '1' : '0');
+    } catch (error) {
+      console.error(`Error storing boolean ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve a boolean value
+   */
+  async getBoolean(key: string): Promise<boolean | null> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Try MMKV first
+      const mmkvValue = storage.getBoolean(prefixedKey);
+      
+      if (mmkvValue !== undefined) {
+        return mmkvValue;
+      }
+      
+      // Fall back to AsyncStorage
+      const value = await AsyncStorage.getItem(prefixedKey);
+      if (value !== null) {
+        const boolValue = value === '1';
+        // Update MMKV for next time
+        storage.set(prefixedKey, boolValue);
+        return boolValue;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Error retrieving boolean ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Store an object as JSON
+   */
+  async setJsonItem<T>(key: string, value: T): Promise<void> {
+    try {
+      const jsonValue = JSON.stringify(value);
+      await this.setItem(key, jsonValue);
+    } catch (error) {
+      console.error(`Error storing JSON ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve an object from JSON
+   */
+  async getJsonItem<T>(key: string): Promise<T | null> {
+    try {
+      const jsonValue = await this.getItem(key);
+      if (jsonValue === null) {
+        return null;
+      }
+      return JSON.parse(jsonValue) as T;
+    } catch (error) {
+      console.error(`Error retrieving JSON ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Remove an item from storage
    */
   async removeItem(key: string): Promise<void> {
     try {
-      await AsyncStorage.removeItem(key);
+      const prefixedKey = this.prefixKey(key);
+      // Remove from both storages
+      storage.delete(prefixedKey);
+      await AsyncStorage.removeItem(prefixedKey);
     } catch (error) {
-      console.error(`Error removing item [${key}]:`, error);
+      console.error(`Error removing ${key}:`, error);
       throw error;
     }
   }
-
+  
   /**
-   * Clear all stored data
-   * Use with caution - this will wipe all app data
+   * Clear all storage
    */
-  async clearAll(): Promise<void> {
+  async clear(): Promise<void> {
     try {
+      // Clear both storages
+      storage.clearAll();
       await AsyncStorage.clear();
     } catch (error) {
       console.error('Error clearing storage:', error);
       throw error;
     }
   }
-
+  
   /**
-   * Get all keys stored in storage
-   * @returns Array of all storage keys
+   * Check if a key exists in storage
+   */
+  async hasKey(key: string): Promise<boolean> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Check MMKV first
+      if (storage.contains(prefixedKey)) {
+        return true;
+      }
+      
+      // Fall back to AsyncStorage
+      const value = await AsyncStorage.getItem(prefixedKey);
+      return value !== null;
+    } catch (error) {
+      console.error(`Error checking if key ${key} exists:`, error);
+      return false;
+    }
+  }
+  
+  /**
+   * Get all keys in storage
    */
   async getAllKeys(): Promise<string[]> {
     try {
-      return await AsyncStorage.getAllKeys();
+      // Get keys from AsyncStorage (more reliable for this operation)
+      const allKeys = await AsyncStorage.getAllKeys();
+      
+      // Filter to only our prefixed keys and remove prefix
+      return allKeys
+        .filter(key => key.startsWith(STORAGE_PREFIX))
+        .map(key => key.substring(STORAGE_PREFIX.length));
     } catch (error) {
       console.error('Error getting all keys:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Store sensitive data securely (encrypted)
+   */
+  async setSecureItem(key: string, value: string): Promise<void> {
+    try {
+      const prefixedKey = this.prefixSecureKey(key);
+      await EncryptedStorage.setItem(prefixedKey, value);
+    } catch (error) {
+      console.error(`Error storing secure ${key}:`, error);
       throw error;
     }
   }
-
+  
   /**
-   * Store multiple key-value pairs at once
-   * @param pairs Array of [key, value] pairs to store
+   * Retrieve sensitive data securely (encrypted)
    */
-  async multiSet(pairs: [string, any][]): Promise<void> {
+  async getSecureItem(key: string): Promise<string | null> {
     try {
-      const processedPairs = pairs.map(([key, value]) => {
-        const processedValue = typeof value === 'object' ? JSON.stringify(value) : value;
-        return [key, processedValue];
-      });
-      await AsyncStorage.multiSet(processedPairs as [string, string][]);
+      const prefixedKey = this.prefixSecureKey(key);
+      const value = await EncryptedStorage.getItem(prefixedKey);
+      return value;
     } catch (error) {
-      console.error('Error setting multiple items:', error);
+      console.error(`Error retrieving secure ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Remove sensitive data
+   */
+  async removeSecureItem(key: string): Promise<void> {
+    try {
+      const prefixedKey = this.prefixSecureKey(key);
+      await EncryptedStorage.removeItem(prefixedKey);
+    } catch (error) {
+      console.error(`Error removing secure ${key}:`, error);
       throw error;
     }
   }
-
+  
   /**
-   * Get multiple values by their keys
-   * @param keys Array of keys to retrieve
-   * @returns Array of values in the same order as the keys
+   * Clear all secure storage
    */
-  async multiGet(keys: string[]): Promise<any[]> {
+  async clearSecureStorage(): Promise<void> {
     try {
-      const results = await AsyncStorage.multiGet(keys);
-      return results.map(([_, value]) => {
-        if (value === null) {
-          return null;
-        }
-        
-        try {
-          return JSON.parse(value);
-        } catch {
-          return value;
-        }
-      });
+      await EncryptedStorage.clear();
     } catch (error) {
-      console.error('Error getting multiple items:', error);
+      console.error('Error clearing secure storage:', error);
       throw error;
     }
+  }
+  
+  /**
+   * Store a JSON object securely
+   */
+  async setSecureJsonItem<T>(key: string, value: T): Promise<void> {
+    try {
+      const jsonValue = JSON.stringify(value);
+      await this.setSecureItem(key, jsonValue);
+    } catch (error) {
+      console.error(`Error storing secure JSON ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve a JSON object securely
+   */
+  async getSecureJsonItem<T>(key: string): Promise<T | null> {
+    try {
+      const jsonValue = await this.getSecureItem(key);
+      if (jsonValue === null) {
+        return null;
+      }
+      return JSON.parse(jsonValue) as T;
+    } catch (error) {
+      console.error(`Error retrieving secure JSON ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Prefix a key for consistency
+   */
+  private prefixKey(key: string): string {
+    if (key.startsWith(STORAGE_PREFIX)) {
+      return key;
+    }
+    return `${STORAGE_PREFIX}${key}`;
+  }
+  
+  /**
+   * Prefix a secure key for consistency
+   */
+  private prefixSecureKey(key: string): string {
+    if (key.startsWith(SECURE_STORAGE_PREFIX)) {
+      return key;
+    }
+    return `${SECURE_STORAGE_PREFIX}${key}`;
   }
 }
 
-// Create and export a singleton instance
+// Export singleton instance
 export const storageService = new StorageService();

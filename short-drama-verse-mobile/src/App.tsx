@@ -19,6 +19,7 @@ import { analyticsService } from '@/services/analytics';
 import { storageService } from '@/services/storage';
 import { apiService } from '@/services/api';
 import { advertisingService } from '@/services/advertising';
+import { deviceIdentifierService } from '@/services/deviceIdentifier';
 
 // Initialize query client for API requests
 const queryClient = new QueryClient({
@@ -42,8 +43,11 @@ const initializeApp = async () => {
   // Initialize storage service first as other services depend on it
   await storageService.initialize();
   
+  // Initialize device identifier service
+  await deviceIdentifierService.initialize();
+  
   // Initialize API service
-  apiService.initialize();
+  await apiService.initialize();
   
   // Initialize analytics service
   await analyticsService.initialize();

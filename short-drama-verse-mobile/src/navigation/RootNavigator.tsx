@@ -28,6 +28,7 @@ import { anonymousAuthService } from '@/services/anonymousAuth';
 import { useAuth } from '@/hooks/useAuth';
 import { analyticsService } from '@/services/analytics';
 import { AnalyticsEventType } from '@/services/analytics';
+import { deviceIdentifierService } from '@/services/deviceIdentifier';
 
 // Types
 import { RootStackParamList, MainTabParamList } from '@/types/navigation';
@@ -92,14 +93,24 @@ const RootNavigator = () => {
         // Initialize anonymous auth
         const anonymousUser = await anonymousAuthService.initialize();
         
+        // Get device info for more detailed tracking
+        const deviceInfo = await deviceIdentifierService.getDeviceInfo();
+        
         // Check if this is a returning device
         const isReturning = await anonymousAuthService.isReturningDevice();
         setIsFirstLaunch(!isReturning);
         
-        // Track app launch in analytics
+        // Set anonymous ID in analytics for better tracking
+        analyticsService.setAnonymousId(anonymousUser.id);
+        
+        // Track app launch in analytics with device info
         analyticsService.trackEvent(AnalyticsEventType.APP_OPEN, {
           anonymousId: anonymousUser.id,
-          isFirstLaunch: !isReturning
+          isFirstLaunch: !isReturning,
+          deviceId: deviceInfo.deviceId,
+          platform: deviceInfo.platform,
+          storeSource: deviceInfo.installSource,
+          storeCountry: deviceInfo.storeCountry
         });
       } catch (error) {
         console.error('Error initializing app:', error);

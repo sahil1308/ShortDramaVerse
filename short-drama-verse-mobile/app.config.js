@@ -9,6 +9,25 @@ module.exports = {
     resizeMode: "contain",
     backgroundColor: "#ffffff"
   },
+  notification: {
+    icon: "./src/assets/notification-icon.png",
+    color: "#ff5e3a",
+    androidMode: "default",
+    androidCollapsedTitle: "ShortDramaVerse",
+    iosDisplayInForeground: true,
+  },
+  plugins: [
+    [
+      "expo-notifications",
+      {
+        icon: "./src/assets/notification-icon.png",
+        color: "#ff5e3a",
+        sounds: [
+          "./src/assets/notification-sound.wav"
+        ]
+      }
+    ]
+  ],
   updates: {
     fallbackToCacheTimeout: 0
   },
