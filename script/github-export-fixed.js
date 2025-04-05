@@ -84,37 +84,25 @@ async function main() {
     console.log('Initializing Git repository...');
     execSync(`cd "${TEMP_DIR}" && git init`);
     
-    // Get GitHub username
-    const githubUsername = await getGitHubUsername();
-    console.log(`Using GitHub username: ${githubUsername}`);
+    // Set the fixed GitHub username for repository sync
+    const githubUsername = "sahil1308";
+    console.log(`Using fixed GitHub username: ${githubUsername}`);
 
-    // Always create/recreate GitHub repository
-    console.log('Creating or updating GitHub repository...');
+    // We'll not delete or recreate the repository, just update the existing one
+    console.log(`Updating GitHub repository ${githubUsername}/${REPO_NAME}...`);
     
     try {
-      // Delete repository if it exists
+      // Check if the repository exists
       try {
-        execSync(`curl -s -X DELETE -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/${githubUsername}/${REPO_NAME}`, 
+        execSync(`curl -s -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/${githubUsername}/${REPO_NAME}`, 
           { stdio: 'pipe' });
-        console.log(`Deleted existing GitHub repository ${REPO_NAME}.`);
-        // Wait a bit to let GitHub process the deletion
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log(`Repository ${githubUsername}/${REPO_NAME} exists and will be updated.`);
       } catch (error) {
-        console.log(`Repository ${REPO_NAME} does not exist yet or could not be deleted.`);
+        console.error(`Repository ${githubUsername}/${REPO_NAME} does not exist or is not accessible. Please ensure it exists.`);
+        process.exit(1);
       }
-      
-      // Create new repository
-      console.log(`Creating GitHub repository ${REPO_NAME}...`);
-      execSync(`curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
-        -d '{"name":"${REPO_NAME}", "description":"${REPO_DESCRIPTION}", "private":false, "auto_init":false}' \
-        https://api.github.com/user/repos`, 
-        { stdio: 'inherit' });
-      
-      console.log(`GitHub repository ${REPO_NAME} created successfully.`);
-      // Wait a bit to let GitHub fully initialize the repository
-      await new Promise(resolve => setTimeout(resolve, 3000));
     } catch (error) {
-      console.error('Error creating GitHub repository:', error);
+      console.error('Error checking GitHub repository:', error);
       process.exit(1);
     }
     
@@ -351,7 +339,8 @@ module.exports = mergeConfig(getDefaultConfig(__dirname), config);
     
     // Commit files
     console.log('Committing files...');
-    execSync(`cd "${TEMP_DIR}" && git commit -m "Initial commit: ShortDramaVerse Mobile Application"`, 
+    const date = new Date().toISOString();
+    execSync(`cd "${TEMP_DIR}" && git commit -m "Update ShortDramaVerse Mobile Application - ${date}"`, 
       { stdio: 'inherit' });
     
     // Add GitHub remote and push
