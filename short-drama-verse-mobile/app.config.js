@@ -3,31 +3,12 @@ module.exports = {
   slug: "short-drama-verse",
   version: "1.0.0",
   orientation: "portrait",
-  icon: "./src/assets/icon.png",
+  icon: "./assets/icon.png",
   splash: {
-    image: "./src/assets/splash.png",
+    image: "./assets/splash.png",
     resizeMode: "contain",
     backgroundColor: "#ffffff"
   },
-  notification: {
-    icon: "./src/assets/notification-icon.png",
-    color: "#ff5e3a",
-    androidMode: "default",
-    androidCollapsedTitle: "ShortDramaVerse",
-    iosDisplayInForeground: true,
-  },
-  plugins: [
-    [
-      "expo-notifications",
-      {
-        icon: "./src/assets/notification-icon.png",
-        color: "#ff5e3a",
-        sounds: [
-          "./src/assets/notification-sound.wav"
-        ]
-      }
-    ]
-  ],
   updates: {
     fallbackToCacheTimeout: 0
   },
@@ -36,17 +17,17 @@ module.exports = {
   ],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.shortdramaverse.app"
+    bundleIdentifier: "com.shortdramaverse"
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./src/assets/adaptive-icon.png",
+      foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#FFFFFF"
     },
-    package: "com.shortdramaverse.app"
+    package: "com.shortdramaverse"
   },
   web: {
-    favicon: "./src/assets/favicon.png"
+    favicon: "./assets/favicon.png"
   },
   extra: {
     eas: {
