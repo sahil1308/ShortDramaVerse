@@ -1,0 +1,28 @@
+PS C:\Users\sahil\Replit Development\shot movie app\short-drama-verse-mobile> npx react-native run-android
+(node:20136) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+info Starting JS server...
+info Launching emulator...
+error Failed to launch emulator. Reason: The emulator (Pixel_4_XL_API_33) quit before it finished opening. You can try starting the emulator manually from the terminal with: C:\Users\sahil\AppData\Local\Android\Sdk/emulator/emulator @Pixel_4_XL_API_33.
+warn Please launch an emulator manually or connect a device. Otherwise app may fail to launch.
+info Installing the app...
+
+info 💡 Tip: Make sure that you have set up your development environment correctly, by running react-native doctor. To read more about doctor command visit: https://github.com/react-native-community/cli/blob/main/packages/cli-doctor/README.md#doctor 
+
+'gradlew.bat' is not recognized as an internal or external command,
+operable program or batch file.
+error Failed to install the app.
+info Run CLI with --verbose flag for more details.
+PS C:\Users\sahil\Replit Development\shot movie app\short-drama-verse-mobile> npx react-native run-android
+(node:19508) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+info Starting JS server...
+info Installing the app...
+
+info 💡 Tip: Make sure that you have set up your development environment correctly, by running react-native doctor. To read more about doctor command visit: https://github.com/react-native-community/cli/blob/main/packages/cli-doctor/README.md#doctor 
+
+'gradlew.bat' is not recognized as an internal or external command,
+operable program or batch file.
+error Failed to install the app.
+info Run CLI with --verbose flag for more details.
+PS C:\Users\sahil\Replit Development\shot movie app\short-drama-verse-mobile> 
