@@ -2,3 +2,28 @@ rootProject.name = 'ShortDramaVerse'
 apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
+
+// Use JDK 17 toolchain
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.5.0'
+}
+
+// Configure JDK 17 toolchain
+toolchainManagement {
+    jvm {
+        javaRepositories {
+            repository('foojay') {
+                resolverClass = org.gradle.toolchains.foojay.FoojayToolchainResolver
+            }
+        }
+    }
+}
+
+// Force JDK 17 for all projects
+allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        // Use JDK 17 language features
+        options.compilerArgs += "--release"
+        options.compilerArgs += "17"
+    }
+}

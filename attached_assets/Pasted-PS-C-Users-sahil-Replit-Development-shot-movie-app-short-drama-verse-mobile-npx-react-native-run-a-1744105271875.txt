@@ -1,0 +1,40 @@
+PS C:\Users\sahil\Replit Development\shot movie app\short-drama-verse-mobile> npx react-native run-android
+(node:13324) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+info Starting JS server...
+info Installing the app...
+
+Welcome to Gradle 8.3!
+
+Here are the highlights of this release:
+ - Faster Java compilation
+ - Reduced memory usage
+ - Support for running on Java 20
+
+For more details see https://docs.gradle.org/8.3/release-notes.html
+
+Starting a Gradle Daemon, 1 incompatible Daemon could not be reused, use --status for details
+
+info 💡 Tip: Make sure that you have set up your development environment correctly, by running react-native doctor. To read more about doctor command visit: https://github.com/react-native-community/cli/blob/main/packages/cli-doctor/README.md#doctor 
+
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/C:/Users/sahil/.gradle/wrapper/dists/gradle-8.3-all/6en3ugtfdg5xnpx44z4qbwgas/gradle-8.3/lib/native-platform-0.22-milestone-24.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Could not open settings generic class cache for settings file 'C:\Users\sahil\Replit Development\shot movie app\short-drama-verse-mobile\android\settings.gradle' (C:\Users\sahil\.gradle\caches\8.3\scripts\7sl9u6y9un6mwjqpxnw1bp1fl).
+> BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_' Unsupported class file major version 68
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 6s
+error Failed to install the app.
+info Run CLI with --verbose flag for more details.
