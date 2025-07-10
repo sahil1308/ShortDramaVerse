@@ -4,7 +4,7 @@
  * Collection of hooks for accessing content data from the API.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { contentService } from '@/services/content';
+import { contentService } from '../services/content';
 import { 
   DramaSeries, 
   Episode, 
@@ -12,7 +12,7 @@ import {
   SearchResult,
   WatchHistoryEntry,
   WatchlistItem
-} from '@/types/content';
+} from '../types/content';
 import { useAnonymousUser } from './useAnonymousUser';
 
 // Series list hook
@@ -446,5 +446,126 @@ export function useWatchlist() {
     addToWatchlist,
     removeFromWatchlist,
     isInWatchlist
+  };
+}
+
+// Main content hook that combines all functionality
+export function useContent() {
+  const { user } = useAnonymousUser();
+
+  // Get dramas by genre
+  const getDramasByGenre = useCallback(async (genre: string): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.getSeriesByGenre(genre);
+    } catch (error) {
+      console.error('Error fetching dramas by genre:', error);
+      throw error;
+    }
+  }, []);
+
+  // Get trending dramas
+  const getTrendingDramas = useCallback(async (limit = 20): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.getTrendingContent(limit);
+    } catch (error) {
+      console.error('Error fetching trending dramas:', error);
+      throw error;
+    }
+  }, []);
+
+  // Get new releases
+  const getNewReleases = useCallback(async (limit = 20): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.getNewReleases(limit);
+    } catch (error) {
+      console.error('Error fetching new releases:', error);
+      throw error;
+    }
+  }, []);
+
+  // Get popular dramas
+  const getPopularDramas = useCallback(async (limit = 20): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.getPopularContent(limit);
+    } catch (error) {
+      console.error('Error fetching popular dramas:', error);
+      throw error;
+    }
+  }, []);
+
+  // Search dramas
+  const searchDramas = useCallback(async (query: string): Promise<DramaSeries[]> => {
+    try {
+      const results = await contentService.searchContent(query);
+      return results.map(result => result.series).filter(Boolean);
+    } catch (error) {
+      console.error('Error searching dramas:', error);
+      throw error;
+    }
+  }, []);
+
+  // Search dramas by title
+  const searchDramasByTitle = useCallback(async (title: string): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.searchSeriesByTitle(title);
+    } catch (error) {
+      console.error('Error searching dramas by title:', error);
+      throw error;
+    }
+  }, []);
+
+  // Search dramas by genre
+  const searchDramasByGenre = useCallback(async (genre: string): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.getSeriesByGenre(genre);
+    } catch (error) {
+      console.error('Error searching dramas by genre:', error);
+      throw error;
+    }
+  }, []);
+
+  // Search dramas by actor
+  const searchDramasByActor = useCallback(async (actor: string): Promise<DramaSeries[]> => {
+    try {
+      return await contentService.searchSeriesByActor(actor);
+    } catch (error) {
+      console.error('Error searching dramas by actor:', error);
+      throw error;
+    }
+  }, []);
+
+  // Add to watch history
+  const addToWatchHistory = useCallback(async (data: {
+    drama_id: number;
+    episode_id: number;
+    watch_time: number;
+    completed: boolean;
+  }) => {
+    if (!user) return;
+    
+    try {
+      await contentService.recordWatchProgress(
+        data.episode_id,
+        'episode',
+        data.completed ? 100 : (data.watch_time / 1800) * 100, // Assuming 30min episodes
+        data.watch_time,
+        data.completed
+      );
+    } catch (error) {
+      console.error('Error adding to watch history:', error);
+      throw error;
+    }
+  }, [user]);
+
+  return {
+    getDramasByGenre,
+    getTrendingDramas,
+    getNewReleases,
+    getPopularDramas,
+    searchDramas,
+    searchDramasByTitle,
+    searchDramasByGenre,
+    searchDramasByActor,
+    addToWatchHistory
   };
 }
