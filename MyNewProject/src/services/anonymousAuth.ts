@@ -1,219 +1,218 @@
 /**
  * Anonymous Authentication Service
  * 
- * This service handles anonymous user identification and tracking
- * without requiring mandatory registration, ensuring privacy while
- * enabling personalized experiences.
+ * Handles device identification and anonymous user tracking.
+ * Assigns unique IDs to users without requiring registration.
  */
+import { storageService } from './storage';
+import { deviceIdentifierService } from './deviceIdentifier';
+import { apiService } from './api';
+import { analyticsService } from './analytics';
+import { AnalyticsEventType } from './analytics';
+import uuid from 'react-native-uuid';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateUniqueId } from './deviceIdentifier';
-
-const ANONYMOUS_USER_ID_KEY = 'anonymous_user_id';
-const USER_PREFERENCES_KEY = 'user_preferences';
-
-export interface UserPreferences {
-  contentLanguage: string;
-  preferredGenres: string[];
-  autoPlayEnabled: boolean;
-  dataUsageOptimization: boolean;
-  notificationsEnabled: boolean;
-  lastActiveDate: string;
-  totalWatchTime: number;
-  favoriteContentIds: string[];
-  watchHistory: string[];
+// Anonymous user interface
+export interface AnonymousUser {
+  id: string;
+  deviceIdentifiers: Record<string, string>;
+  firstSeen: string;
+  lastSeen: string;
+  totalVisits: number;
 }
 
-const defaultPreferences: UserPreferences = {
-  contentLanguage: 'en',
-  preferredGenres: [],
-  autoPlayEnabled: true,
-  dataUsageOptimization: false,
-  notificationsEnabled: true,
-  lastActiveDate: new Date().toISOString(),
-  totalWatchTime: 0,
-  favoriteContentIds: [],
-  watchHistory: [],
+// Storage keys
+const STORAGE_KEYS = {
+  anonymousUser: 'anonymous_user',
+  deviceIdentifiers: 'device_identifiers'
 };
 
-/**
- * Initialize anonymous authentication system
- */
-export const initializeAnonymousAuth = async (): Promise<void> => {
-  try {
-    // Check if anonymous user already exists
-    const existingUserId = await AsyncStorage.getItem(ANONYMOUS_USER_ID_KEY);
+// API endpoints
+const API_ENDPOINTS = {
+  anonymousUser: '/user/anonymous'
+};
+
+class AnonymousAuthService {
+  private currentUser: AnonymousUser | null = null;
+  private isInitialized = false;
+  
+  /**
+   * Initialize the anonymous authentication service
+   */
+  async initialize(): Promise<void> {
+    if (this.isInitialized) return;
     
-    if (!existingUserId) {
-      // Generate new anonymous user ID
-      const newUserId = await generateUniqueId();
-      await AsyncStorage.setItem(ANONYMOUS_USER_ID_KEY, newUserId);
+    try {
+      // Try to get existing anonymous user from storage
+      const storedUser = await storageService.getJsonItem<AnonymousUser>(STORAGE_KEYS.anonymousUser);
       
-      // Set default preferences
-      await AsyncStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(defaultPreferences));
+      if (storedUser) {
+        // Update last seen time and increment visit count
+        this.currentUser = {
+          ...storedUser,
+          lastSeen: new Date().toISOString(),
+          totalVisits: (storedUser.totalVisits || 0) + 1
+        };
+        
+        // Update device identifiers in case they've changed
+        const deviceIds = await deviceIdentifierService.getAllIdentifiers();
+        this.currentUser.deviceIdentifiers = {
+          ...this.currentUser.deviceIdentifiers,
+          ...deviceIds
+        };
+        
+        // Save updated user data
+        await storageService.setJsonItem(STORAGE_KEYS.anonymousUser, this.currentUser);
+        
+        // Sync with server
+        this.syncWithServer(this.currentUser);
+      } else {
+        // Create new anonymous user
+        await this.createAnonymousUser();
+      }
       
-      console.log('Anonymous user initialized:', newUserId);
-    } else {
-      console.log('Existing anonymous user found:', existingUserId);
+      this.isInitialized = true;
       
-      // Update last active date
-      await updateLastActiveDate();
+      // Track user session start
+      analyticsService.trackEvent(AnalyticsEventType.SESSION_START, {
+        anonymous_id: this.currentUser?.id,
+        total_visits: this.currentUser?.totalVisits
+      });
+    } catch (error) {
+      console.error('Error initializing anonymous authentication:', error);
     }
-  } catch (error) {
-    console.error('Failed to initialize anonymous auth:', error);
-    throw error;
   }
-};
-
-/**
- * Get or create anonymous user ID
- */
-export const getAnonymousUserId = async (): Promise<string> => {
-  try {
-    let userId = await AsyncStorage.getItem(ANONYMOUS_USER_ID_KEY);
-    
-    if (!userId) {
-      userId = await generateUniqueId();
-      await AsyncStorage.setItem(ANONYMOUS_USER_ID_KEY, userId);
-      await AsyncStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(defaultPreferences));
+  
+  /**
+   * Create a new anonymous user
+   */
+  private async createAnonymousUser(): Promise<void> {
+    try {
+      // Get device identifiers
+      const deviceIds = await deviceIdentifierService.getAllIdentifiers();
+      
+      // Create new user object
+      const newUser: AnonymousUser = {
+        id: uuid.v4().toString(),
+        deviceIdentifiers: deviceIds,
+        firstSeen: new Date().toISOString(),
+        lastSeen: new Date().toISOString(),
+        totalVisits: 1
+      };
+      
+      // Save to storage
+      await storageService.setJsonItem(STORAGE_KEYS.anonymousUser, newUser);
+      this.currentUser = newUser;
+      
+      // Register with server
+      this.registerWithServer(newUser);
+      
+      // Track new anonymous user creation
+      analyticsService.trackEvent(AnalyticsEventType.NEW_USER, {
+        anonymous_id: newUser.id,
+        device_count: Object.keys(deviceIds).length
+      });
+    } catch (error) {
+      console.error('Error creating anonymous user:', error);
     }
-    
-    return userId;
-  } catch (error) {
-    console.error('Failed to get anonymous user ID:', error);
-    // Fallback to generated ID
-    return await generateUniqueId();
   }
-};
-
-/**
- * Get user preferences
- */
-export const getUserPreferences = async (): Promise<UserPreferences> => {
-  try {
-    const preferencesData = await AsyncStorage.getItem(USER_PREFERENCES_KEY);
-    
-    if (preferencesData) {
-      return JSON.parse(preferencesData);
+  
+  /**
+   * Register anonymous user with server
+   */
+  private async registerWithServer(user: AnonymousUser): Promise<void> {
+    try {
+      await apiService.post(API_ENDPOINTS.anonymousUser, user);
+    } catch (error) {
+      console.error('Error registering anonymous user with server:', error);
+      // Non-blocking error - will try again later
     }
-    
-    return defaultPreferences;
-  } catch (error) {
-    console.error('Failed to get user preferences:', error);
-    return defaultPreferences;
   }
-};
-
-/**
- * Update user preferences
- */
-export const updateUserPreferences = async (preferences: Partial<UserPreferences>): Promise<void> => {
-  try {
-    const currentPreferences = await getUserPreferences();
-    const updatedPreferences = { ...currentPreferences, ...preferences };
-    
-    await AsyncStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(updatedPreferences));
-    
-    console.log('User preferences updated');
-  } catch (error) {
-    console.error('Failed to update user preferences:', error);
-    throw error;
+  
+  /**
+   * Sync user data with server
+   */
+  private async syncWithServer(user: AnonymousUser): Promise<void> {
+    try {
+      await apiService.put(`${API_ENDPOINTS.anonymousUser}/${user.id}`, user);
+    } catch (error) {
+      console.error('Error syncing anonymous user with server:', error);
+      // Non-blocking error - will try again later
+    }
   }
-};
-
-/**
- * Update last active date
- */
-export const updateLastActiveDate = async (): Promise<void> => {
-  try {
-    const currentPreferences = await getUserPreferences();
-    currentPreferences.lastActiveDate = new Date().toISOString();
-    
-    await AsyncStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(currentPreferences));
-  } catch (error) {
-    console.error('Failed to update last active date:', error);
-  }
-};
-
-/**
- * Add content to watch history
- */
-export const addToWatchHistory = async (contentId: string): Promise<void> => {
-  try {
-    const preferences = await getUserPreferences();
-    
-    // Remove if already exists to avoid duplicates
-    const filteredHistory = preferences.watchHistory.filter(id => id !== contentId);
-    
-    // Add to beginning of array
-    filteredHistory.unshift(contentId);
-    
-    // Keep only last 100 items
-    if (filteredHistory.length > 100) {
-      filteredHistory.splice(100);
+  
+  /**
+   * Get the current anonymous user
+   * Initializes if not already done
+   */
+  async getCurrentUser(): Promise<AnonymousUser> {
+    if (!this.isInitialized) {
+      await this.initialize();
     }
     
-    await updateUserPreferences({ watchHistory: filteredHistory });
-  } catch (error) {
-    console.error('Failed to add to watch history:', error);
-  }
-};
-
-/**
- * Add content to favorites
- */
-export const addToFavorites = async (contentId: string): Promise<void> => {
-  try {
-    const preferences = await getUserPreferences();
-    
-    if (!preferences.favoriteContentIds.includes(contentId)) {
-      preferences.favoriteContentIds.push(contentId);
-      await updateUserPreferences({ favoriteContentIds: preferences.favoriteContentIds });
+    if (!this.currentUser) {
+      throw new Error('Failed to initialize anonymous user');
     }
-  } catch (error) {
-    console.error('Failed to add to favorites:', error);
-  }
-};
-
-/**
- * Remove content from favorites
- */
-export const removeFromFavorites = async (contentId: string): Promise<void> => {
-  try {
-    const preferences = await getUserPreferences();
-    const filteredFavorites = preferences.favoriteContentIds.filter(id => id !== contentId);
     
-    await updateUserPreferences({ favoriteContentIds: filteredFavorites });
-  } catch (error) {
-    console.error('Failed to remove from favorites:', error);
+    return this.currentUser;
   }
-};
+  
+  /**
+   * Check if an anonymous user exists on this device
+   */
+  async hasExistingUser(): Promise<boolean> {
+    return !!(await storageService.getJsonItem<AnonymousUser>(STORAGE_KEYS.anonymousUser));
+  }
+  
+  /**
+   * Reset the anonymous user
+   * This is typically used when a user logs out
+   */
+  async resetAnonymousUser(): Promise<void> {
+    try {
+      // Track user reset
+      if (this.currentUser) {
+        analyticsService.trackEvent(AnalyticsEventType.CUSTOM, {
+          name: 'anonymous_user_reset',
+          anonymous_id: this.currentUser.id
+        });
+      }
+      
+      // Remove from storage
+      await storageService.removeItem(STORAGE_KEYS.anonymousUser);
+      
+      // Create new anonymous user
+      await this.createAnonymousUser();
+    } catch (error) {
+      console.error('Error resetting anonymous user:', error);
+    }
+  }
+  
+  /**
+   * Update user metadata
+   */
+  async updateUserMetadata(metadata: Record<string, any>): Promise<void> {
+    try {
+      if (!this.currentUser) {
+        await this.getCurrentUser();
+      }
+      
+      // Update user with metadata
+      this.currentUser = {
+        ...this.currentUser!,
+        ...metadata,
+        lastSeen: new Date().toISOString()
+      };
+      
+      // Save to storage
+      await storageService.setJsonItem(STORAGE_KEYS.anonymousUser, this.currentUser);
+      
+      // Sync with server
+      this.syncWithServer(this.currentUser);
+    } catch (error) {
+      console.error('Error updating anonymous user metadata:', error);
+    }
+  }
+}
 
-/**
- * Update total watch time
- */
-export const updateWatchTime = async (additionalMinutes: number): Promise<void> => {
-  try {
-    const preferences = await getUserPreferences();
-    const newTotalWatchTime = preferences.totalWatchTime + additionalMinutes;
-    
-    await updateUserPreferences({ totalWatchTime: newTotalWatchTime });
-  } catch (error) {
-    console.error('Failed to update watch time:', error);
-  }
-};
-
-/**
- * Clear all user data (for privacy/reset purposes)
- */
-export const clearUserData = async (): Promise<void> => {
-  try {
-    await AsyncStorage.removeItem(ANONYMOUS_USER_ID_KEY);
-    await AsyncStorage.removeItem(USER_PREFERENCES_KEY);
-    
-    console.log('User data cleared');
-  } catch (error) {
-    console.error('Failed to clear user data:', error);
-    throw error;
-  }
-};
+// Export singleton instance
+export const anonymousAuthService = new AnonymousAuthService();

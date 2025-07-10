@@ -1,302 +1,346 @@
 /**
  * Storage Service
  * 
- * This service handles local data storage, caching, and persistence
- * for the ShortDramaVerse application using AsyncStorage.
+ * Provides persistent local storage with encryption support.
  */
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
+import EncryptedStorage from 'react-native-encrypted-storage';
 
-const ONBOARDING_COMPLETED_KEY = 'onboarding_completed';
-const APP_SETTINGS_KEY = 'app_settings';
-const CACHE_KEYS = {
-  FEATURED_DRAMAS: 'cache_featured_dramas',
-  POPULAR_DRAMAS: 'cache_popular_dramas',
-  RECOMMENDATIONS: 'cache_recommendations',
-  SWIPEABLE_CONTENT: 'cache_swipeable_content',
-};
+// Storage instance for fast access
+const storage = new MMKV();
 
-export interface AppSettings {
-  theme: 'light' | 'dark' | 'auto';
-  language: string;
-  autoPlay: boolean;
-  dataUsageOptimization: boolean;
-  downloadQuality: 'low' | 'medium' | 'high';
-  subtitlesEnabled: boolean;
-  subtitlesLanguage: string;
-  videoQuality: 'auto' | '720p' | '1080p';
-  lastAppVersion: string;
-  installDate: string;
-  lastUpdateDate: string;
-}
+// Storage keys
+const STORAGE_PREFIX = 'sdv_'; // ShortDramaVerse prefix
+const SECURE_STORAGE_PREFIX = 'sdv_secure_';
 
-const defaultAppSettings: AppSettings = {
-  theme: 'dark',
-  language: 'en',
-  autoPlay: true,
-  dataUsageOptimization: false,
-  downloadQuality: 'medium',
-  subtitlesEnabled: false,
-  subtitlesLanguage: 'en',
-  videoQuality: 'auto',
-  lastAppVersion: '1.0.0',
-  installDate: new Date().toISOString(),
-  lastUpdateDate: new Date().toISOString(),
-};
-
-/**
- * Check if onboarding has been completed
- */
-export const checkOnboardingCompleted = async (): Promise<boolean> => {
-  try {
-    const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
-    return completed === 'true';
-  } catch (error) {
-    console.error('Failed to check onboarding status:', error);
-    return false;
-  }
-};
-
-/**
- * Set onboarding as completed
- */
-export const setOnboardingCompleted = async (completed: boolean): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, completed.toString());
-  } catch (error) {
-    console.error('Failed to set onboarding status:', error);
-    throw error;
-  }
-};
-
-/**
- * Get app settings
- */
-export const getAppSettings = async (): Promise<AppSettings> => {
-  try {
-    const settingsData = await AsyncStorage.getItem(APP_SETTINGS_KEY);
-    
-    if (settingsData) {
-      const settings = JSON.parse(settingsData);
-      return { ...defaultAppSettings, ...settings };
+class StorageService {
+  /**
+   * Store a string value
+   */
+  async setItem(key: string, value: string): Promise<void> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Store in both MMKV (fast) and AsyncStorage (reliable)
+      storage.set(prefixedKey, value);
+      await AsyncStorage.setItem(prefixedKey, value);
+    } catch (error) {
+      console.error(`Error storing ${key}:`, error);
+      throw error;
     }
-    
-    return defaultAppSettings;
-  } catch (error) {
-    console.error('Failed to get app settings:', error);
-    return defaultAppSettings;
   }
-};
-
-/**
- * Update app settings
- */
-export const updateAppSettings = async (settings: Partial<AppSettings>): Promise<void> => {
-  try {
-    const currentSettings = await getAppSettings();
-    const updatedSettings = { 
-      ...currentSettings, 
-      ...settings,
-      lastUpdateDate: new Date().toISOString(),
-    };
-    
-    await AsyncStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(updatedSettings));
-  } catch (error) {
-    console.error('Failed to update app settings:', error);
-    throw error;
-  }
-};
-
-/**
- * Cache data with expiration
- */
-export const cacheData = async (
-  key: string, 
-  data: any, 
-  expirationMinutes: number = 60
-): Promise<void> => {
-  try {
-    const cacheItem = {
-      data,
-      timestamp: Date.now(),
-      expirationMinutes,
-    };
-    
-    await AsyncStorage.setItem(key, JSON.stringify(cacheItem));
-  } catch (error) {
-    console.error('Failed to cache data:', error);
-  }
-};
-
-/**
- * Get cached data if not expired
- */
-export const getCachedData = async (key: string): Promise<any | null> => {
-  try {
-    const cacheData = await AsyncStorage.getItem(key);
-    
-    if (!cacheData) {
-      return null;
-    }
-    
-    const cacheItem = JSON.parse(cacheData);
-    const now = Date.now();
-    const expirationTime = cacheItem.timestamp + (cacheItem.expirationMinutes * 60 * 1000);
-    
-    if (now > expirationTime) {
-      // Cache expired, remove it
-      await AsyncStorage.removeItem(key);
-      return null;
-    }
-    
-    return cacheItem.data;
-  } catch (error) {
-    console.error('Failed to get cached data:', error);
-    return null;
-  }
-};
-
-/**
- * Clear specific cache
- */
-export const clearCache = async (key: string): Promise<void> => {
-  try {
-    await AsyncStorage.removeItem(key);
-  } catch (error) {
-    console.error('Failed to clear cache:', error);
-  }
-};
-
-/**
- * Clear all app cache
- */
-export const clearAllCache = async (): Promise<void> => {
-  try {
-    const promises = Object.values(CACHE_KEYS).map(key => AsyncStorage.removeItem(key));
-    await Promise.all(promises);
-  } catch (error) {
-    console.error('Failed to clear all cache:', error);
-  }
-};
-
-/**
- * Get storage usage information
- */
-export const getStorageUsage = async (): Promise<{
-  totalKeys: number;
-  estimatedSize: number;
-  cacheKeys: number;
-  userDataKeys: number;
-}> => {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    
-    const cacheKeys = allKeys.filter(key => key.startsWith('cache_')).length;
-    const userDataKeys = allKeys.filter(key => 
-      !key.startsWith('cache_') && 
-      (key.includes('user') || key.includes('preferences') || key.includes('settings'))
-    ).length;
-    
-    // Estimate size (rough calculation)
-    let estimatedSize = 0;
-    const sampleKeys = allKeys.slice(0, Math.min(10, allKeys.length));
-    
-    for (const key of sampleKeys) {
-      const value = await AsyncStorage.getItem(key);
-      if (value) {
-        estimatedSize += value.length;
-      }
-    }
-    
-    // Extrapolate for all keys
-    const averageSize = estimatedSize / sampleKeys.length;
-    const totalEstimatedSize = Math.round(averageSize * allKeys.length);
-    
-    return {
-      totalKeys: allKeys.length,
-      estimatedSize: totalEstimatedSize,
-      cacheKeys,
-      userDataKeys,
-    };
-  } catch (error) {
-    console.error('Failed to get storage usage:', error);
-    return {
-      totalKeys: 0,
-      estimatedSize: 0,
-      cacheKeys: 0,
-      userDataKeys: 0,
-    };
-  }
-};
-
-/**
- * Export all data for backup
- */
-export const exportAllData = async (): Promise<Record<string, any>> => {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const allData: Record<string, any> = {};
-    
-    for (const key of allKeys) {
-      const value = await AsyncStorage.getItem(key);
-      if (value) {
-        try {
-          allData[key] = JSON.parse(value);
-        } catch {
-          allData[key] = value;
+  
+  /**
+   * Retrieve a string value
+   */
+  async getItem(key: string): Promise<string | null> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Try MMKV first (faster)
+      let value = storage.getString(prefixedKey);
+      
+      // Fall back to AsyncStorage if not in MMKV
+      if (value === undefined) {
+        value = await AsyncStorage.getItem(prefixedKey);
+        
+        // If found in AsyncStorage but not MMKV, update MMKV for next time
+        if (value !== null) {
+          storage.set(prefixedKey, value);
         }
       }
+      
+      return value || null;
+    } catch (error) {
+      console.error(`Error retrieving ${key}:`, error);
+      return null;
     }
-    
-    return allData;
-  } catch (error) {
-    console.error('Failed to export data:', error);
-    return {};
   }
-};
-
-/**
- * Import data from backup
- */
-export const importData = async (data: Record<string, any>): Promise<void> => {
-  try {
-    const promises = Object.entries(data).map(([key, value]) => {
-      const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-      return AsyncStorage.setItem(key, stringValue);
-    });
-    
-    await Promise.all(promises);
-  } catch (error) {
-    console.error('Failed to import data:', error);
-    throw error;
-  }
-};
-
-/**
- * Clear all app data (for reset purposes)
- */
-export const clearAllAppData = async (): Promise<void> => {
-  try {
-    await AsyncStorage.clear();
-  } catch (error) {
-    console.error('Failed to clear all app data:', error);
-    throw error;
-  }
-};
-
-/**
- * Cleanup old cache entries
- */
-export const cleanupOldCache = async (): Promise<void> => {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const cacheKeys = allKeys.filter(key => key.startsWith('cache_'));
-    
-    for (const key of cacheKeys) {
-      // This will automatically remove expired cache entries
-      await getCachedData(key);
+  
+  /**
+   * Store a numeric value
+   */
+  async setNumber(key: string, value: number): Promise<void> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Store in both MMKV and AsyncStorage
+      storage.set(prefixedKey, value);
+      await AsyncStorage.setItem(prefixedKey, value.toString());
+    } catch (error) {
+      console.error(`Error storing number ${key}:`, error);
+      throw error;
     }
-  } catch (error) {
-    console.error('Failed to cleanup old cache:', error);
   }
-};
+  
+  /**
+   * Retrieve a numeric value
+   */
+  async getNumber(key: string): Promise<number | null> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Try MMKV first
+      const mmkvValue = storage.getNumber(prefixedKey);
+      
+      if (mmkvValue !== undefined) {
+        return mmkvValue;
+      }
+      
+      // Fall back to AsyncStorage
+      const value = await AsyncStorage.getItem(prefixedKey);
+      if (value !== null) {
+        const numValue = parseFloat(value);
+        // Update MMKV for next time
+        storage.set(prefixedKey, numValue);
+        return numValue;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Error retrieving number ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Store a boolean value
+   */
+  async setBoolean(key: string, value: boolean): Promise<void> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Store in both MMKV and AsyncStorage
+      storage.set(prefixedKey, value);
+      await AsyncStorage.setItem(prefixedKey, value ? '1' : '0');
+    } catch (error) {
+      console.error(`Error storing boolean ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve a boolean value
+   */
+  async getBoolean(key: string): Promise<boolean | null> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Try MMKV first
+      const mmkvValue = storage.getBoolean(prefixedKey);
+      
+      if (mmkvValue !== undefined) {
+        return mmkvValue;
+      }
+      
+      // Fall back to AsyncStorage
+      const value = await AsyncStorage.getItem(prefixedKey);
+      if (value !== null) {
+        const boolValue = value === '1';
+        // Update MMKV for next time
+        storage.set(prefixedKey, boolValue);
+        return boolValue;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Error retrieving boolean ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Store an object as JSON
+   */
+  async setJsonItem<T>(key: string, value: T): Promise<void> {
+    try {
+      const jsonValue = JSON.stringify(value);
+      await this.setItem(key, jsonValue);
+    } catch (error) {
+      console.error(`Error storing JSON ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve an object from JSON
+   */
+  async getJsonItem<T>(key: string): Promise<T | null> {
+    try {
+      const jsonValue = await this.getItem(key);
+      if (jsonValue === null) {
+        return null;
+      }
+      return JSON.parse(jsonValue) as T;
+    } catch (error) {
+      console.error(`Error retrieving JSON ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Remove an item from storage
+   */
+  async removeItem(key: string): Promise<void> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Remove from both storages
+      storage.delete(prefixedKey);
+      await AsyncStorage.removeItem(prefixedKey);
+    } catch (error) {
+      console.error(`Error removing ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Clear all storage
+   */
+  async clear(): Promise<void> {
+    try {
+      // Clear both storages
+      storage.clearAll();
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Check if a key exists in storage
+   */
+  async hasKey(key: string): Promise<boolean> {
+    try {
+      const prefixedKey = this.prefixKey(key);
+      // Check MMKV first
+      if (storage.contains(prefixedKey)) {
+        return true;
+      }
+      
+      // Fall back to AsyncStorage
+      const value = await AsyncStorage.getItem(prefixedKey);
+      return value !== null;
+    } catch (error) {
+      console.error(`Error checking if key ${key} exists:`, error);
+      return false;
+    }
+  }
+  
+  /**
+   * Get all keys in storage
+   */
+  async getAllKeys(): Promise<string[]> {
+    try {
+      // Get keys from AsyncStorage (more reliable for this operation)
+      const allKeys = await AsyncStorage.getAllKeys();
+      
+      // Filter to only our prefixed keys and remove prefix
+      return allKeys
+        .filter(key => key.startsWith(STORAGE_PREFIX))
+        .map(key => key.substring(STORAGE_PREFIX.length));
+    } catch (error) {
+      console.error('Error getting all keys:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Store sensitive data securely (encrypted)
+   */
+  async setSecureItem(key: string, value: string): Promise<void> {
+    try {
+      const prefixedKey = this.prefixSecureKey(key);
+      await EncryptedStorage.setItem(prefixedKey, value);
+    } catch (error) {
+      console.error(`Error storing secure ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve sensitive data securely (encrypted)
+   */
+  async getSecureItem(key: string): Promise<string | null> {
+    try {
+      const prefixedKey = this.prefixSecureKey(key);
+      const value = await EncryptedStorage.getItem(prefixedKey);
+      return value;
+    } catch (error) {
+      console.error(`Error retrieving secure ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Remove sensitive data
+   */
+  async removeSecureItem(key: string): Promise<void> {
+    try {
+      const prefixedKey = this.prefixSecureKey(key);
+      await EncryptedStorage.removeItem(prefixedKey);
+    } catch (error) {
+      console.error(`Error removing secure ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Clear all secure storage
+   */
+  async clearSecureStorage(): Promise<void> {
+    try {
+      await EncryptedStorage.clear();
+    } catch (error) {
+      console.error('Error clearing secure storage:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Store a JSON object securely
+   */
+  async setSecureJsonItem<T>(key: string, value: T): Promise<void> {
+    try {
+      const jsonValue = JSON.stringify(value);
+      await this.setSecureItem(key, jsonValue);
+    } catch (error) {
+      console.error(`Error storing secure JSON ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Retrieve a JSON object securely
+   */
+  async getSecureJsonItem<T>(key: string): Promise<T | null> {
+    try {
+      const jsonValue = await this.getSecureItem(key);
+      if (jsonValue === null) {
+        return null;
+      }
+      return JSON.parse(jsonValue) as T;
+    } catch (error) {
+      console.error(`Error retrieving secure JSON ${key}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Prefix a key for consistency
+   */
+  private prefixKey(key: string): string {
+    if (key.startsWith(STORAGE_PREFIX)) {
+      return key;
+    }
+    return `${STORAGE_PREFIX}${key}`;
+  }
+  
+  /**
+   * Prefix a secure key for consistency
+   */
+  private prefixSecureKey(key: string): string {
+    if (key.startsWith(SECURE_STORAGE_PREFIX)) {
+      return key;
+    }
+    return `${SECURE_STORAGE_PREFIX}${key}`;
+  }
+}
+
+// Export singleton instance
+export const storageService = new StorageService();

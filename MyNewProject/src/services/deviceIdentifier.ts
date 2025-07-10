@@ -1,285 +1,234 @@
 /**
  * Device Identifier Service
  * 
- * This service handles device identification and unique ID generation
- * for cross-platform user tracking while maintaining privacy.
+ * Provides device-specific identification for user tracking without requiring login.
+ * Used by analytics and anonymous user services.
  */
-
+import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import { MMKV } from 'react-native-mmkv';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { v4 as uuidv4 } from 'uuid';
 
-const DEVICE_ID_KEY = 'device_unique_id';
-const DEVICE_INFO_KEY = 'device_info';
+// Storage key for device ID
+const DEVICE_ID_KEY = 'device_identifier';
+const ANONYMOUS_ID_KEY = 'anonymous_user_id';
 
+// Storage for persistent data
+const storage = new MMKV();
+
+/**
+ * Device information interface
+ */
 export interface DeviceInformation {
-  deviceId: string;
-  deviceName: string;
-  brand: string;
+  uniqueId: string;
   model: string;
-  systemName: string;
-  systemVersion: string;
-  buildNumber: string;
+  platform: string;
+  osVersion: string;
   appVersion: string;
-  isTablet: boolean;
-  hasNotch: boolean;
-  screenWidth: number;
-  screenHeight: number;
+  brand?: string;
+  manufacturer?: string;
+  isTablet?: boolean;
+  language: string;
   timezone: string;
-  carrier: string;
-  totalMemory: number;
-  ipAddress: string;
-  macAddress: string;
-  userAgent: string;
-  createdAt: string;
-  lastUpdated: string;
+  firstInstallTime?: number;
 }
 
-/**
- * Initialize device identifier system
- */
-export const initializeDeviceIdentifier = async (): Promise<void> => {
-  try {
-    // Check if device ID already exists
-    const existingDeviceId = await AsyncStorage.getItem(DEVICE_ID_KEY);
-    
-    if (!existingDeviceId) {
-      // Generate new device ID
-      const deviceId = await generateUniqueId();
-      await AsyncStorage.setItem(DEVICE_ID_KEY, deviceId);
+class DeviceIdentifierService {
+  private deviceId: string | null = null;
+  private anonymousId: string | null = null;
+  
+  constructor() {
+    // Initialize device ID
+    this.initialize();
+  }
+  
+  /**
+   * Initialize the service and ensure device IDs exist
+   */
+  private async initialize(): Promise<void> {
+    try {
+      // Try to load existing device ID
+      const existingDeviceId = storage.getString(DEVICE_ID_KEY) || 
+        await AsyncStorage.getItem(DEVICE_ID_KEY);
       
-      // Collect and store device information
-      const deviceInfo = await collectDeviceInformation(deviceId);
-      await AsyncStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(deviceInfo));
+      if (existingDeviceId) {
+        this.deviceId = existingDeviceId;
+      } else {
+        // Generate a new device ID
+        this.deviceId = await this.generateDeviceId();
+        
+        // Save to persistent storage
+        storage.set(DEVICE_ID_KEY, this.deviceId);
+        await AsyncStorage.setItem(DEVICE_ID_KEY, this.deviceId);
+      }
       
-      console.log('Device identifier initialized:', deviceId);
-    } else {
-      console.log('Existing device ID found:', existingDeviceId);
+      // Also initialize anonymous ID
+      await this.getAnonymousId();
+    } catch (error) {
+      console.error('Error initializing device identifier:', error);
+      // Fallback to a random uuid if nothing else works
+      this.deviceId = uuidv4();
+    }
+  }
+  
+  /**
+   * Generate a unique device ID
+   */
+  private async generateDeviceId(): Promise<string> {
+    try {
+      // Try to use device's unique ID if available
+      const nativeDeviceId = await DeviceInfo.getUniqueId();
+      if (nativeDeviceId) {
+        return nativeDeviceId;
+      }
+    } catch (error) {
+      console.error('Error getting native device ID:', error);
+    }
+    
+    // Fallback to a combination of device info
+    try {
+      const deviceName = await DeviceInfo.getDeviceName();
+      const brand = DeviceInfo.getBrand();
+      const model = DeviceInfo.getModel();
+      const installTime = await DeviceInfo.getFirstInstallTime();
       
-      // Update device information
-      await updateDeviceInformation();
-    }
-  } catch (error) {
-    console.error('Failed to initialize device identifier:', error);
-    throw error;
-  }
-};
-
-/**
- * Generate unique device ID
- */
-export const generateUniqueId = async (): Promise<string> => {
-  try {
-    // Try to get hardware-based unique ID first
-    const uniqueId = await DeviceInfo.getUniqueId();
-    
-    // If that fails, generate a random ID
-    if (!uniqueId) {
-      const randomId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      return randomId;
+      // Combine these into a unique string
+      const combinedInfo = `${deviceName}-${brand}-${model}-${installTime}`;
+      
+      // Hash the string (simplified version)
+      let hash = 0;
+      for (let i = 0; i < combinedInfo.length; i++) {
+        const char = combinedInfo.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      
+      return `device_${Math.abs(hash).toString(16)}`;
+    } catch (error) {
+      console.error('Error generating fallback device ID:', error);
     }
     
-    return uniqueId;
-  } catch (error) {
-    console.error('Failed to generate unique ID:', error);
-    // Fallback to timestamp-based ID
-    return `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Last resort: random UUID
+    return uuidv4();
   }
-};
-
-/**
- * Get device unique ID
- */
-export const getDeviceId = async (): Promise<string> => {
-  try {
-    let deviceId = await AsyncStorage.getItem(DEVICE_ID_KEY);
-    
-    if (!deviceId) {
-      deviceId = await generateUniqueId();
-      await AsyncStorage.setItem(DEVICE_ID_KEY, deviceId);
+  
+  /**
+   * Get the device's unique identifier
+   */
+  public async getDeviceId(): Promise<string> {
+    if (!this.deviceId) {
+      await this.initialize();
+    }
+    return this.deviceId || uuidv4();
+  }
+  
+  /**
+   * Get an anonymous user ID (separate from device ID)
+   */
+  public async getAnonymousId(): Promise<string> {
+    if (this.anonymousId) {
+      return this.anonymousId;
     }
     
-    return deviceId;
-  } catch (error) {
-    console.error('Failed to get device ID:', error);
-    return await generateUniqueId();
-  }
-};
-
-/**
- * Collect comprehensive device information
- */
-export const collectDeviceInformation = async (deviceId: string): Promise<DeviceInformation> => {
-  try {
-    const deviceInfo: DeviceInformation = {
-      deviceId,
-      deviceName: await DeviceInfo.getDeviceName(),
-      brand: await DeviceInfo.getBrand(),
-      model: await DeviceInfo.getModel(),
-      systemName: await DeviceInfo.getSystemName(),
-      systemVersion: await DeviceInfo.getSystemVersion(),
-      buildNumber: await DeviceInfo.getBuildNumber(),
-      appVersion: await DeviceInfo.getVersion(),
-      isTablet: await DeviceInfo.isTablet(),
-      hasNotch: await DeviceInfo.hasNotch(),
-      screenWidth: 0, // Will be set from Dimensions
-      screenHeight: 0, // Will be set from Dimensions
-      timezone: await DeviceInfo.getTimezone(),
-      carrier: await DeviceInfo.getCarrier(),
-      totalMemory: await DeviceInfo.getTotalMemory(),
-      ipAddress: await DeviceInfo.getIpAddress(),
-      macAddress: await DeviceInfo.getMacAddress(),
-      userAgent: await DeviceInfo.getUserAgent(),
-      createdAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    };
-    
-    return deviceInfo;
-  } catch (error) {
-    console.error('Failed to collect device information:', error);
-    
-    // Return minimal device info as fallback
-    return {
-      deviceId,
-      deviceName: 'Unknown Device',
-      brand: 'Unknown',
-      model: 'Unknown',
-      systemName: 'Unknown',
-      systemVersion: 'Unknown',
-      buildNumber: 'Unknown',
-      appVersion: '1.0.0',
-      isTablet: false,
-      hasNotch: false,
-      screenWidth: 0,
-      screenHeight: 0,
-      timezone: 'Unknown',
-      carrier: 'Unknown',
-      totalMemory: 0,
-      ipAddress: 'Unknown',
-      macAddress: 'Unknown',
-      userAgent: 'Unknown',
-      createdAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    };
-  }
-};
-
-/**
- * Get stored device information
- */
-export const getDeviceInformation = async (): Promise<DeviceInformation | null> => {
-  try {
-    const deviceInfoData = await AsyncStorage.getItem(DEVICE_INFO_KEY);
-    
-    if (deviceInfoData) {
-      return JSON.parse(deviceInfoData);
+    try {
+      // Try to load existing anonymous ID
+      const existingId = storage.getString(ANONYMOUS_ID_KEY) || 
+        await AsyncStorage.getItem(ANONYMOUS_ID_KEY);
+      
+      if (existingId) {
+        this.anonymousId = existingId;
+      } else {
+        // Generate a new anonymous ID
+        this.anonymousId = uuidv4();
+        
+        // Save to persistent storage
+        storage.set(ANONYMOUS_ID_KEY, this.anonymousId);
+        await AsyncStorage.setItem(ANONYMOUS_ID_KEY, this.anonymousId);
+      }
+      
+      return this.anonymousId;
+    } catch (error) {
+      console.error('Error getting anonymous user ID:', error);
+      // Fallback to a random uuid if nothing else works
+      this.anonymousId = uuidv4();
+      return this.anonymousId;
     }
-    
-    return null;
-  } catch (error) {
-    console.error('Failed to get device information:', error);
-    return null;
   }
-};
-
-/**
- * Update device information (for periodic updates)
- */
-export const updateDeviceInformation = async (): Promise<void> => {
-  try {
-    const deviceId = await getDeviceId();
-    const currentInfo = await getDeviceInformation();
+  
+  /**
+   * Reset the anonymous user ID (but keep device ID)
+   */
+  public async resetAnonymousId(): Promise<string> {
+    try {
+      // Generate a new anonymous ID
+      this.anonymousId = uuidv4();
+      
+      // Save to persistent storage
+      storage.set(ANONYMOUS_ID_KEY, this.anonymousId);
+      await AsyncStorage.setItem(ANONYMOUS_ID_KEY, this.anonymousId);
+      
+      return this.anonymousId;
+    } catch (error) {
+      console.error('Error resetting anonymous user ID:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get detailed device information
+   */
+  public async getDeviceInfo(): Promise<DeviceInformation> {
+    const deviceId = await this.getDeviceId();
     
-    if (currentInfo) {
-      // Update only dynamic fields
-      const updatedInfo: DeviceInformation = {
-        ...currentInfo,
-        systemVersion: await DeviceInfo.getSystemVersion(),
-        appVersion: await DeviceInfo.getVersion(),
-        carrier: await DeviceInfo.getCarrier(),
-        ipAddress: await DeviceInfo.getIpAddress(),
-        lastUpdated: new Date().toISOString(),
+    try {
+      return {
+        uniqueId: deviceId,
+        model: DeviceInfo.getModel(),
+        platform: Platform.OS,
+        osVersion: DeviceInfo.getSystemVersion(),
+        appVersion: DeviceInfo.getVersion(),
+        brand: DeviceInfo.getBrand(),
+        manufacturer: await DeviceInfo.getManufacturer(),
+        isTablet: DeviceInfo.isTablet(),
+        language: Platform.OS === 'ios' 
+          ? await DeviceInfo.getDeviceLocale() 
+          : await DeviceInfo.getSystemLanguage(),
+        timezone: DeviceInfo.getTimezone(),
+        firstInstallTime: await DeviceInfo.getFirstInstallTime()
       };
+    } catch (error) {
+      console.error('Error getting device information:', error);
       
-      await AsyncStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(updatedInfo));
-    } else {
-      // Create new device info if none exists
-      const deviceInfo = await collectDeviceInformation(deviceId);
-      await AsyncStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(deviceInfo));
+      // Return minimal info if detailed info fails
+      return {
+        uniqueId: deviceId,
+        model: 'unknown',
+        platform: Platform.OS || 'unknown',
+        osVersion: 'unknown',
+        appVersion: 'unknown',
+        language: 'en',
+        timezone: 'UTC'
+      };
     }
-  } catch (error) {
-    console.error('Failed to update device information:', error);
   }
-};
+  
+  /**
+   * Check if this is a fresh install
+   */
+  public async isFreshInstall(): Promise<boolean> {
+    try {
+      const firstInstall = await DeviceInfo.getFirstInstallTime();
+      const lastUpdate = await DeviceInfo.getLastUpdateTime();
+      
+      // If first install and last update are within 1 minute, it's likely a fresh install
+      return Math.abs(firstInstall - lastUpdate) < 60000;
+    } catch (error) {
+      console.error('Error checking if fresh install:', error);
+      return false;
+    }
+  }
+}
 
-/**
- * Check if device is rooted/jailbroken (for security)
- */
-export const checkDeviceSecurity = async (): Promise<{
-  isRooted: boolean;
-  isEmulator: boolean;
-  isDebuggingEnabled: boolean;
-}> => {
-  try {
-    const [isRooted, isEmulator] = await Promise.all([
-      DeviceInfo.isRooted(),
-      DeviceInfo.isEmulator(),
-    ]);
-    
-    return {
-      isRooted,
-      isEmulator,
-      isDebuggingEnabled: await DeviceInfo.isDebuggingEnabled(),
-    };
-  } catch (error) {
-    console.error('Failed to check device security:', error);
-    return {
-      isRooted: false,
-      isEmulator: false,
-      isDebuggingEnabled: false,
-    };
-  }
-};
-
-/**
- * Get device performance metrics
- */
-export const getDevicePerformanceMetrics = async (): Promise<{
-  totalMemory: number;
-  usedMemory: number;
-  freeMemory: number;
-  totalStorage: number;
-  freeStorage: number;
-  batteryLevel: number;
-  isCharging: boolean;
-}> => {
-  try {
-    const [totalMemory, usedMemory, freeStorage, batteryLevel, isCharging] = await Promise.all([
-      DeviceInfo.getTotalMemory(),
-      DeviceInfo.getUsedMemory(),
-      DeviceInfo.getFreeDiskStorage(),
-      DeviceInfo.getBatteryLevel(),
-      DeviceInfo.isBatteryCharging(),
-    ]);
-    
-    return {
-      totalMemory,
-      usedMemory,
-      freeMemory: totalMemory - usedMemory,
-      totalStorage: freeStorage * 2, // Approximation
-      freeStorage,
-      batteryLevel,
-      isCharging,
-    };
-  } catch (error) {
-    console.error('Failed to get device performance metrics:', error);
-    return {
-      totalMemory: 0,
-      usedMemory: 0,
-      freeMemory: 0,
-      totalStorage: 0,
-      freeStorage: 0,
-      batteryLevel: 0,
-      isCharging: false,
-    };
-  }
-};
+// Export singleton instance
+export const deviceIdentifierService = new DeviceIdentifierService();

@@ -1,175 +1,117 @@
 /**
- * SplashScreen - App loading and initialization screen
+ * Splash Screen Component
  * 
- * This screen handles app initialization, checks for first-time users,
- * and navigates to appropriate screens based on user state.
+ * Displays a loading screen with logo when the app is initializing.
  */
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Animated,
+  ActivityIndicator,
   StatusBar,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { useAuth } from '@/hooks/useAuth';
+import { colors, spacing } from '@/constants/theme';
 
-import { RootStackParamList } from '../../App';
-
-// Import services
-import { checkOnboardingCompleted } from '../services/storage';
-import { initializeAnalytics } from '../services/analytics';
-import { getAnonymousUserId } from '../services/anonymousAuth';
-
-type SplashScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Splash'>;
-
-const SplashScreen: React.FC = () => {
-  const navigation = useNavigation<SplashScreenNavigationProp>();
-  const [isInitialized, setIsInitialized] = useState(false);
-  
+/**
+ * Splash Screen Component
+ * 
+ * @returns Splash screen JSX
+ */
+const SplashScreen = () => {
   // Animation values
-  const fadeAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(0.8);
-
+  const logoOpacity = new Animated.Value(0);
+  const logoScale = new Animated.Value(0.8);
+  
+  // Navigation and Auth
+  const navigation = useNavigation();
+  const { isInitialized, user } = useAuth();
+  
+  // Animation sequence
   useEffect(() => {
-    initializeApp();
-    startAnimation();
-  }, []);
-
-  const startAnimation = () => {
+    // Animate logo appearance
     Animated.parallel([
-      Animated.timing(fadeAnim, {
+      Animated.timing(logoOpacity, {
         toValue: 1,
-        duration: 1000,
+        duration: 800,
         useNativeDriver: true,
+        easing: Easing.inOut(Easing.ease),
       }),
-      Animated.spring(scaleAnim, {
+      Animated.timing(logoScale, {
         toValue: 1,
-        tension: 100,
-        friction: 8,
+        duration: 800,
         useNativeDriver: true,
+        easing: Easing.elastic(1),
       }),
     ]).start();
-  };
-
-  const initializeApp = async () => {
-    try {
-      // Initialize analytics
-      await initializeAnalytics();
+    
+    // Navigate after auth is initialized
+    if (isInitialized) {
+      const timer = setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: user ? 'Main' : 'Auth' }],
+        });
+      }, 2000);
       
-      // Get or create anonymous user ID
-      const userId = await getAnonymousUserId();
-      console.log('Anonymous user ID:', userId);
-      
-      // Check if onboarding has been completed
-      const onboardingCompleted = await checkOnboardingCompleted();
-      
-      // Wait for minimum splash duration
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setIsInitialized(true);
-      
-      // Navigate based on onboarding status
-      if (onboardingCompleted) {
-        navigation.replace('Home');
-      } else {
-        navigation.replace('Onboarding');
-      }
-    } catch (error) {
-      console.error('Failed to initialize app:', error);
-      // Navigate to onboarding as fallback
-      navigation.replace('Onboarding');
+      return () => clearTimeout(timer);
     }
-  };
-
+  }, [isInitialized, navigation, user, logoOpacity, logoScale]);
+  
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
-        {/* App Logo/Icon */}
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoEmoji}>🎭</Text>
-          <Text style={styles.appName}>ShortDramaVerse</Text>
-          <Text style={styles.tagline}>Discover. Watch. Enjoy.</Text>
-        </View>
-        
-        {/* Loading Indicator */}
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingDot} />
-          <View style={[styles.loadingDot, { animationDelay: '0.2s' }]} />
-          <View style={[styles.loadingDot, { animationDelay: '0.4s' }]} />
-        </View>
-        
-        <Text style={styles.loadingText}>
-          {isInitialized ? 'Ready!' : 'Loading...'}
-        </Text>
+      <Animated.View style={[
+        styles.logoContainer,
+        { opacity: logoOpacity, transform: [{ scale: logoScale }] }
+      ]}>
+        <Text style={styles.logoText}>ShortDramaVerse</Text>
+        <Text style={styles.tagline}>Experience drama in short form</Text>
       </Animated.View>
+      
+      <ActivityIndicator size="large" color={colors.white} style={styles.loader} />
+      
+      <Text style={styles.loadingText}>Loading amazing content...</Text>
     </View>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  content: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: spacing.lg,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: spacing.xl,
   },
-  logoEmoji: {
-    fontSize: 80,
-    marginBottom: 20,
-  },
-  appName: {
+  logoText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-    textAlign: 'center',
+    color: colors.white,
+    marginBottom: spacing.sm,
   },
   tagline: {
     fontSize: 16,
-    color: '#cccccc',
-    textAlign: 'center',
+    color: colors.white,
     opacity: 0.8,
   },
-  loadingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  loadingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ff6b6b',
-    marginHorizontal: 5,
-    // Note: CSS animations would need to be replaced with React Native animations
-    // For now, keeping it simple
+  loader: {
+    marginVertical: spacing.lg,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#ffffff',
-    textAlign: 'center',
+    fontSize: 14,
+    color: colors.white,
+    opacity: 0.7,
   },
 });
 
