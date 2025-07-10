@@ -15,7 +15,7 @@ import { useContent } from '../../hooks/useContent';
 import { useAnalytics } from '../../hooks/useAnalytics';
 import { DramaCard } from '../../components/DramaCard';
 import { EmptyStateView } from '../../components/EmptyStateView';
-import { Drama } from '../../types/drama';
+import { DramaSeries } from '../../types/drama';
 
 interface ExploreScreenProps {
   navigation: any;
@@ -41,7 +41,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ navigation }) => {
   } = useContent();
   const { trackEvent } = useAnalytics();
 
-  const [dramas, setDramas] = useState<Drama[]>([]);
+  const [dramas, setDramas] = useState<DramaSeries[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
@@ -52,7 +52,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ navigation }) => {
   const loadDramas = async () => {
     try {
       setLoading(true);
-      let result: Drama[] = [];
+      let result: DramaSeries[] = [];
       
       if (selectedGenre === 'All') {
         result = await getTrendingDramas();
@@ -99,7 +99,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  const handleDramaPress = (drama: Drama) => {
+  const handleDramaPress = (drama: DramaSeries) => {
     trackEvent('explore_drama_selected', {
       drama_id: drama.id,
       drama_title: drama.title,
@@ -169,7 +169,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ navigation }) => {
     </View>
   );
 
-  const renderDramaItem = ({ item }: { item: Drama }) => (
+  const renderDramaItem = ({ item }: { item: DramaSeries }) => (
     <DramaCard
       drama={item}
       onPress={() => handleDramaPress(item)}
